@@ -8,7 +8,7 @@ resources:
   containers:
   - container: platformio
     image: infinitecoding/platformio-for-ci:latest
-    endpoint: personal-docker-hub-connection
+    endpoint: dockerhub_connection
 
 container: platformio
 steps:
