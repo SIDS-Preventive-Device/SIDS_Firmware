@@ -1,5 +1,6 @@
 trigger:
 - azure-pipelines
+- master
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -27,6 +28,3 @@ steps:
     PathtoPublish: $(Build.ArtifactStagingDirectory)
     publishLocation: Container
     TargetPath: .
-
-trigger:
-- master
