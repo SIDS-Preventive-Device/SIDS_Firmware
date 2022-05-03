@@ -27,3 +27,6 @@ steps:
     PathtoPublish: $(Build.ArtifactStagingDirectory)
     publishLocation: Container
     TargetPath: .
+
+trigger:
+- master
