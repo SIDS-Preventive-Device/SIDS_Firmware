@@ -17,10 +17,13 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <FreeRTOS.h>
+#include <freertos/task.h>
 
 #define FIRMWARE_VERSION F("0.1.1")
 
 KernelLogger logger (nullptr);
+TaskHandle_t handler;
 
 SystemCore::SystemCore (SystemConfig_t config)
     : configuration(config)
@@ -44,6 +47,19 @@ SystemCore &SystemCore::init () {
     logger << LOG_MASTER << LOGGER_TEXT_GREEN
         << F("Initialization finished!")
         << EndLine;
+
+    xTaskCreatePinnedToCore (
+        [](void *data) -> void {
+            uint32_t input = 0;
+            for (;;) {
+                xTaskNotifyWait (0, 0, &input, portMAX_DELAY);
+                logger << LOG_MASTER << F("From 2th core! calculation: ") << (input * 2) << EndLine;
+            }
+            vTaskDelete(NULL);
+        },
+        "2thThread", configMINIMAL_STACK_SIZE, NULL, 1, &handler, 0
+    );
+
     return *this;
 }
 
@@ -53,7 +69,8 @@ void SystemCore::execute () {
         << EndLine;
 
     while (1) {
-        ;
+        xTaskNotify(handler, 0x10, eSetBits);
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }
 
