@@ -24,15 +24,17 @@ class ISensor {
 protected:
     LinkedList<Variable_e> variables;
     SensorState_e state;
+
 public:
-    virtual bool init () = 0;
+    virtual bool init (void *pSystemCore) = 0;
     virtual bool update () = 0;
     virtual void dumpInfo () = 0;
 
-    bool haveVariable (Variable_e var) {
+    template <typename Tvar>
+    bool haveVariable () {
         uint8_t index;
         for (index = 0; index < variables.size(); index++) {
-            if (var == variables[index]) {
+            if (Tvar == variables[index].variable) {
                 return true;
             }
         }

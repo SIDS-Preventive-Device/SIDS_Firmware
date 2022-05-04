@@ -6,7 +6,6 @@
   | |     / _ \  / _` | / _ \| | __ | '__| / _` |\ \ / /
   | \__/\| (_) || (_| ||  __/| |_\ \| |   | (_| | \ V / 
    \____/ \___/  \__,_| \___| \____/|_|    \__,_|  \_/  
-                      Version 0.1                       
 --------------------------------------------------------
 */
 
@@ -14,6 +13,7 @@
 #include "system/errors.h"
 #include "system/logger.h"
 #include "system/utils/i2c.h"
+#include "system/types.h"
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -24,7 +24,9 @@ KernelLogger logger (nullptr);
 
 SystemCore::SystemCore (SystemConfig_t config)
     : configuration(config)
-{ }
+{
+    memset(&this->measures, 0x00, sizeof(this->measures));
+}
 
 SystemCore::~SystemCore () {
     uint8_t index;
@@ -92,7 +94,7 @@ void SystemCore::initializeSensors () {
             LogKernelError ("\tWhile reading sensor list, found sensor ptr as NULL!");
             continue;
         }
-        if (!pSensor->init()) {
+        if (!pSensor->init(this)) {
             LogMinorError ("\tError initializing a sensor!");
         }
         pSensor->dumpInfo();

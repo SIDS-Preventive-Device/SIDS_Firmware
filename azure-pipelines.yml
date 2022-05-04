@@ -13,8 +13,11 @@ resources:
 
 container: platformio
 steps:
-- script: platformio run -d .
+- script: platformio run -d . -e codeGrav
   displayName: 'Build firmware'
+
+- script: platformio test -e native
+  displayName: 'Run native tests'
 
 - task: CopyFiles@2
   inputs:

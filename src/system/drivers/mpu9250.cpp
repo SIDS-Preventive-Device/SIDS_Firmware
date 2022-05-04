@@ -6,10 +6,15 @@
 
 SensorMPU9250::SensorMPU9250()
     : device(__SENSOR_ADDRESS), id(0)
-{}
+{
+    this->variables.clear();
+    this->variables.add(VARIABLE_ACCELERATION);
+    this->variables.add(VARIABLE_GIROSCOPE);
+    this->variables.add(VARIABLE_MAGNETOMETER);
+}
 
-bool SensorMPU9250::init() {
-    logger << LOG_DEBUG << F("Initializing SensorMPU9250") << EndLine;
+bool SensorMPU9250::init(void *pSystemCore) {
+    logger << LOG_DEBUG << F("Initializing Sensor MPU9250") << EndLine;
     this->device.initialize();
     this->state = SENSOR_OK;
     logger << LOG_DEBUG << F("Testing connection...") << EndLine;
@@ -27,7 +32,7 @@ bool SensorMPU9250::update() {
 }
 
 void SensorMPU9250::dumpInfo() {
-    logger << LOG_DEBUG << F("Dump info SensorMPU9250 ------") << EndLine
+    logger << LOG_DEBUG << F("Sensor MPU9250:") << EndLine
             << LOG_DEBUG << F("\tState: ") << GetSensorStateStr(this->state) << EndLine
             << LOG_DEBUG << F("\tType: I2C, address: 0x") << INT_HEX << (uint8_t)__SENSOR_ADDRESS << EndLine
             << LOG_DEBUG << F("\tID: ") << this->id << EndLine;

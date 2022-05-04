@@ -5,6 +5,7 @@
 #include "logger.h"
 #include "isensor.h"
 #include "utils/linkedlist.h"
+#include "types.h"
 
 class TwoWire;
 class HardwareSerial;
@@ -21,6 +22,7 @@ typedef struct {
 
 class SystemCore {
     SystemConfig_t configuration;
+    SystemData_t   measures;
 
 public:
     SystemCore (SystemConfig_t config);
@@ -34,6 +36,8 @@ private:
     void initializeSensors ();
 
     void dumpSysInfo ();
+
+    SystemData_t *getData() { return &this->measures; }
 };
 
 #endif // __CODE_GRAV_SYSTEM_CORE_H__

@@ -2,6 +2,7 @@
 #define __CODE_GRAV_SYSTEM_DRIVERS_MPU_9250_H__
 
 #include <system/isensor.h>
+#include <system/types.h>
 
 //
 // Third-Party Library...
@@ -14,9 +15,13 @@ private:
     MPU9250 device;
     uint8_t id;
 
+    void updateAcceleration() {
+
+    }
+
 public:
     SensorMPU9250 ();
-    bool init();
+    bool init(void *pSystemCore);
     bool update();
     bool haveVariable(Variable_e);
     void dumpInfo();
