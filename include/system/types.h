@@ -8,6 +8,10 @@
 #if !defined(ARDUINO) && defined(UNITY)
 #include <iostream>
 #endif
+#if defined(ARDUINO)
+#include <Print.h>
+#include <Printable.h>
+#endif
 
 typedef uint16_t Temperature_t;
 
@@ -105,13 +109,15 @@ public:
         p.println();
         size_t indexA = 0;
         size_t indexB = 0;
+        size_t c = 0;
         for (indexA = 0; indexA < sizeA; indexA++) {
             for (indexB = 0; indexB < sizeB; indexB++) {
-                p.print(String(array[indexA][indexB]));
-                p.print(F(" "));
+                c += p.print(String(array[indexA][indexB]));
+                c += p.print(F(" "));
             }
             p.println();
         }
+        return c;
     }
 #endif
 
