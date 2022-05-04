@@ -23,7 +23,6 @@ public:
     SensorMPU9250 ();
     bool init(void *pSystemCore);
     bool update();
-    bool haveVariable(Variable_e);
     void dumpInfo();
 };
 

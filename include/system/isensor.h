@@ -30,11 +30,10 @@ public:
     virtual bool update () = 0;
     virtual void dumpInfo () = 0;
 
-    template <typename Tvar>
-    bool haveVariable () {
+    bool haveVariable (Variable_e var) {
         uint8_t index;
         for (index = 0; index < variables.size(); index++) {
-            if (Tvar == variables[index].variable) {
+            if (var == variables[index]) {
                 return true;
             }
         }

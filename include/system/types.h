@@ -104,6 +104,7 @@ public:
     size_t printTo(Print& p) const {
         p.println();
         size_t indexA = 0;
+        size_t indexB = 0;
         for (indexA = 0; indexA < sizeA; indexA++) {
             for (indexB = 0; indexB < sizeB; indexB++) {
                 p.print(String(array[indexA][indexB]));
