@@ -14,14 +14,13 @@ class SensorMPU9250 : public ISensor
 private:
     MPU9250 device;
     uint8_t id;
+    OrientationData_t *outputData;
 
-    void updateAcceleration() {
-
-    }
+    bool firstReadDone;
 
 public:
     SensorMPU9250 ();
-    bool init(void *pSystemCore);
+    bool init(void *pSystemCoreData);
     bool update();
     void dumpInfo();
 };

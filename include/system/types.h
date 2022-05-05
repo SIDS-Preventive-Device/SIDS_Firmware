@@ -16,9 +16,9 @@
 typedef uint16_t Temperature_t;
 
 typedef struct {
-    uint16_t x;
-    uint16_t y;
-    uint16_t z;
+    int16_t x;
+    int16_t y;
+    int16_t z;
 } Vector3D_t;
 
 typedef struct {
@@ -38,16 +38,24 @@ class Matrix
     : public Printable
 #endif
 {
+#if defined(UNITY)
 public:
+#endif
     Tarray array[sizeA][sizeB];
 
 public:
     Matrix() {
+        memset(array, 0x00, sizeof(Tarray) * sizeA * sizeB);
+    }
+
+    Matrix(Tarray inputArray[sizeA][sizeB]) {
+        memset(array, 0x00, sizeof(Tarray) * sizeA * sizeB);
         size_t indexA = 0;
         size_t indexB = 0;
+
         for (indexA = 0; indexA < sizeA; indexA++) {
             for (indexB = 0; indexB < sizeB; indexB++) {
-                array[indexA][indexB] = 0;
+                array[indexA][indexB] = inputArray[indexA][indexB];
             }
         }
     }
@@ -61,6 +69,10 @@ public:
     inline const Tarray* operator[](const size_t &i) const {
         return array[i];
     }
+
+    size_t cols() const { return sizeB; }
+    size_t rows() const { return sizeA; }
+    size_t elements() const { return sizeA * sizeB; }
 
     Matrix<sizeA, sizeB, Tarray> operator +(Matrix const &matrix) {
         Matrix<sizeA, sizeB, Tarray> result;
@@ -102,6 +114,46 @@ public:
         }
         
         return result;
+    }
+
+    template <size_t sizeC, typename Tarray2>
+    Matrix<sizeA, sizeC, Tarray> operator *(Matrix<sizeB, sizeC, Tarray2> &matrix2) {
+        Matrix<sizeA, sizeC, Tarray> result;
+        size_t indexA = 0;
+        size_t indexB = 0;
+        size_t indexC = 0;
+
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexC = 0; indexC < sizeC; indexC++) {
+                result[indexA][indexC] = 0;
+                for (indexB = 0; indexB < sizeB; indexB++) {
+                    result[indexA][indexC] += array[indexA][indexB] * matrix2.array[indexB][indexC];
+                }
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * @brief Transpose matrix
+     * 
+     * @param matrix2 
+     * @return Matrix<sizeB, sizeB, Tarray> 
+     */
+    Matrix<sizeB, sizeA, Tarray> operator ~() {
+        Matrix<sizeB, sizeA, Tarray> transpose;
+        size_t indexA = 0;
+        size_t indexB = 0;
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                transpose[indexB][indexA] = array[indexA][indexB];
+            }
+        }
+
+        return transpose;
     }
 
 #if defined(ARDUINO)

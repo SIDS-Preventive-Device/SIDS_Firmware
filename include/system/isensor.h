@@ -26,7 +26,7 @@ protected:
     SensorState_e state;
 
 public:
-    virtual bool init (void *pSystemCore) = 0;
+    virtual bool init (void *pSystemCoreData) = 0;
     virtual bool update () = 0;
     virtual void dumpInfo () = 0;
 

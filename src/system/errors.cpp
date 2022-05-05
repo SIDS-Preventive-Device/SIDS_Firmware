@@ -18,7 +18,7 @@ void __LogError(const char* file, int line, ErrorType_e error_type, const char* 
         << LOG_ERROR << msg << EndLine;
 #if STOP_AT_CRITICAL
     while (error_type == ERROR_CRITICAL) {
-        ;
+        assert(true);
     }
 #endif
 }

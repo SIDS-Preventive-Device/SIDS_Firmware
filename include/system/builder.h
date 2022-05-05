@@ -21,7 +21,7 @@ public:
 
     SystemBuilder &setI2Cport(TwoWire &bus);
 
-    SystemCore build();
+    SystemCore *build();
 };
 
 #endif // __CODE_GRAV_SYSTEM_BUILDER_H__

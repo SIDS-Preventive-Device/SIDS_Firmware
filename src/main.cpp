@@ -15,9 +15,7 @@ void setup() {
     .setI2Cport(Wire)
     .setLogLevel(LOG_DEBUG)
     .addSensor<SensorMPU9250>()
-    .build()
-    .init()
-    .execute();
+    .build()->init().execute();
 
   //
   // Should not return

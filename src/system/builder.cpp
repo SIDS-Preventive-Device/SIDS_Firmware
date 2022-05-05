@@ -35,7 +35,7 @@ SystemBuilder &SystemBuilder::setI2Cport(TwoWire &bus)
     return *this;
 }
 
-SystemCore SystemBuilder::build()
+SystemCore* SystemBuilder::build()
 {
-    return SystemCore(this->config);
+    return new SystemCore(this->config);
 }

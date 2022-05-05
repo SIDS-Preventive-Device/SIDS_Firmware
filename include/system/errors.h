@@ -8,7 +8,7 @@ typedef enum {
     ERROR_DELIMITER
 } ErrorType_e;
 
-#define STOP_AT_CRITICAL 0
+#define STOP_AT_CRITICAL 1
 
 extern void __LogError(const char* file, int line, ErrorType_e error_type, const char* msg);
 

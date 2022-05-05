@@ -6,6 +6,8 @@
 #include "isensor.h"
 #include "utils/linkedlist.h"
 #include "types.h"
+#include "bootmode.h"
+#include "calltable.h"
 
 class TwoWire;
 class HardwareSerial;
@@ -24,16 +26,25 @@ class SystemCore {
     SystemConfig_t configuration;
     SystemData_t   measures;
 
+    TaskHandle_t   updateSensorsTask_h;
+    TaskHandle_t   systemMainTask_h;
+    SystemBootMode_t _bootMode;
+
 public:
     SystemCore (SystemConfig_t config);
     SystemCore &init ();
     void execute ();
+
+    void updateSensors ();
+
+    SystemBootMode_t bootMode() const { return this->_bootMode; }
 
     ~SystemCore ();
 private:
     void initializeBuses ();
     void initializeLogger ();
     void initializeSensors ();
+    void initializeTasks ();
 
     void dumpSysInfo ();
 
