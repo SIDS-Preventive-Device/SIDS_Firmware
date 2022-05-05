@@ -17,6 +17,7 @@ OsKernelEntryTask_t OsKernel::KernelTaskTable[] = {
     { OsKernel::OsInitLogger,               F("Kernel: Init Logger")          },
     { OsKernel::OsInitBuses,                F("Kernel: Init Buses")           },
     { OsKernel::OsDumpSysInfo,              F("Kernel: Dump Kernel info")     },
+    { OsKernel::OsInitBLE,                  F("Kernel: Init BLE")             },
     { OsKernel::OsInitSensors,              F("Kernel: Init Sensors")         },
     { OsKernel::OsInitTasks,                F("Kernel: Setup tasks")          },
     { OsKernel::OsSetBootMode,              F("Kernek: Define Boot Mode")     }

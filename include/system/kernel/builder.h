@@ -15,6 +15,8 @@ public:
 
     SystemBuilder &setI2Cport(TwoWire &bus);
 
+    SystemBuilder &enableBLE(const __FlashStringHelper* bleDeviceName);
+
     template <class ISensorType>
     SystemBuilder &setOrientationSensor() {
         config.orientationSensor = new ISensorType();

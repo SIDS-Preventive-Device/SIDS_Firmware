@@ -9,7 +9,9 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <Arduino.h>
+#include <BluetoothSerial.h>
 #include <Wire.h>
+#include "esp_bt_device.h"
 
 KernelLogger logger (nullptr);
 
@@ -160,6 +162,40 @@ void OsCall(OsKernel::KernelService_e call)
     LogKernelError("OsCall is not implemented yet");
 }
 
-SystemConfig_t* OsGetSysConfigPtr () {
+SystemConfig_t* OsKernel::OsGetSysConfigPtr () {
     return &OsKernel::configuration;
+}
+
+bool OsKernel::OsInitBLE()
+{
+    if (configuration.blePort == nullptr) {
+        logger << LOG_WARN << F("Bluetooth not specified, BLE functionality disabled!") << EndLine;
+        return true;
+    }
+    if (configuration.bleDeviceName == nullptr) {
+        configuration.bleDeviceName = F("CodeGravOs");
+        logger << LOG_WARN << F("Bluetooth device not provided, using default: ") << configuration.bleDeviceName << EndLine;
+    }
+
+    bool rslt = configuration.blePort->begin(configuration.bleDeviceName);
+    if (!rslt) {
+        LogMinorError("Unable to initialize BLE Port!");
+        return true;
+    }
+
+    logger << LOG_MASTER << F("BLE Initialized as ") << LOGGER_TEXT_GREEN << configuration.bleDeviceName << EndLine;
+
+    rslt = wait([](void *pContext) -> bool {
+        return OsKernel::configuration.blePort->isReady() && OsKernel::configuration.blePort->hasClient();
+    }, NULL, 10000UL, &logger);
+
+    if (!rslt) {
+        LogMinorError("No connection detected, shutdown BLE");
+        configuration.blePort->end();
+        return true;
+    }
+
+    logger << LOG_MASTER << F("Device connected!") << EndLine;
+
+    return true;
 }

@@ -23,8 +23,7 @@ class OrientationFilter {
     Matrix<3, 1, float> MagMeasures;
 public:
     OrientationFilter (
-        OrientationData_t* ptr,
-        TaskHandle_t updateTask_h
+        OrientationData_t* ptr
     );
 
     bool Calibrate();

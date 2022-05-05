@@ -6,11 +6,13 @@
 #include "calls.h"
 #include "system/modules/logger.h"
 #include "system/utils/isensor.h"
+#include <WString.h>
 
 class TwoWire;
 class HardwareSerial;
+class BluetoothSerial;
 
-#define KERNEL_VERSION F("0.2.0")
+#define KERNEL_VERSION F("0.2.1")
 
 typedef struct {
     uint32_t        baudrate;
@@ -18,6 +20,9 @@ typedef struct {
     HardwareSerial* serialPort;
 
     TwoWire*        i2cBus;
+
+    BluetoothSerial* blePort;
+    const __FlashStringHelper* bleDeviceName;
 
     IOrientationSensor *orientationSensor;
 } SystemConfig_t;

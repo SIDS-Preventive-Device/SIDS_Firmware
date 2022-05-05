@@ -12,6 +12,7 @@ extern bool OsInitLogger();
 extern bool OsInitSensors();
 extern bool OsInitTasks();
 extern bool OsSetBootMode();
+extern bool OsInitBLE();
 
 extern SystemConfig_t   configuration;
 extern SystemBootMode_t bootMode;

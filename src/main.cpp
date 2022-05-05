@@ -14,6 +14,7 @@ void setup() {
     .setI2Cport(Wire)
     .setLogLevel(LOG_DEBUG)
     .setOrientationSensor<SensorMPU9250>()
+    .enableBLE(F("GravDevice"))
     .build();
 
   OsKernel::OsInit(config);
