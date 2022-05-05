@@ -16,7 +16,9 @@ steps:
 - script: platformio run -d . -e codeGrav
   displayName: 'Build firmware'
 
-- script: platformio test -e native
+- script: |
+    platformio platform install native
+    platformio test -e native
   displayName: 'Run native tests'
 
 - task: CopyFiles@2
