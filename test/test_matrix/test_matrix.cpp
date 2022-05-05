@@ -5,7 +5,7 @@
 #endif
 #include <unity.h>
 
-#include "system/types.h"
+#include "system/utils/matrix.h"
 #include <math.h>
 
 void test_matrix_1x1_assignment(void) {

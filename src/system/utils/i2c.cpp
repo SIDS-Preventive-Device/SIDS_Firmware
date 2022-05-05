@@ -1,6 +1,6 @@
 #include "system/utils/i2c.h"
 
-#include <system/logger.h>
+#include <system/modules/logger.h>
 
 static bool isI2CDeviceConnected(TwoWire &bus, uint8_t address)
 {

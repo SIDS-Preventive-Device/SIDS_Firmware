@@ -1,4 +1,4 @@
-#include "system/builder.h"
+#include "system/kernel/builder.h"
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -12,8 +12,6 @@ SystemBuilder::SystemBuilder()
     this->config.serialPort = &Serial;
     this->config.logLevel = LOG_INFO;
     this->config.i2cBus = &Wire;
-    this->config.sensors = new LinkedList<ISensor*>();
-    this->config.sensors->clear();
 }
 
 SystemBuilder &SystemBuilder::setSerialConfig(HardwareSerial &port, uint32_t baudrate)
@@ -35,7 +33,7 @@ SystemBuilder &SystemBuilder::setI2Cport(TwoWire &bus)
     return *this;
 }
 
-SystemCore* SystemBuilder::build()
+SystemConfig_t SystemBuilder::build()
 {
-    return new SystemCore(this->config);
+    return this->config;
 }

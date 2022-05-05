@@ -1,21 +1,22 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include <system/core.h>
-#include <system/builder.h>
-#include <system/errors.h>
+#include <system/kernel/builder.h>
+#include <system/utils/errors.h>
 #include <system/drivers/mpu9250.h>
 
 void setup() {
   //
   // Configure, initalize and execute system firmware!
   //
-  SystemBuilder()
+  SystemConfig_t config = SystemBuilder()
     .setSerialConfig(Serial, 115200)
     .setI2Cport(Wire)
     .setLogLevel(LOG_DEBUG)
-    .addSensor<SensorMPU9250>()
-    .build()->init().execute();
+    .setOrientationSensor<SensorMPU9250>()
+    .build();
+
+  OsKernel::OsInit(config);
 
   //
   // Should not return

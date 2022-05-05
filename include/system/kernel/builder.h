@@ -2,18 +2,12 @@
 #define __CODE_GRAV_SYSTEM_BUILDER_H__
 
 #include "core.h"
+#include "system/modules/logger.h"
 
 class SystemBuilder {
     SystemConfig_t config;
 public:
     SystemBuilder ();
-
-    template <class Tsensor>
-    SystemBuilder &addSensor ()
-    {
-        this->config.sensors->add(new Tsensor());
-        return *this;
-    }
 
     SystemBuilder &setSerialConfig(HardwareSerial &port, uint32_t baudrate);
 
@@ -21,7 +15,13 @@ public:
 
     SystemBuilder &setI2Cport(TwoWire &bus);
 
-    SystemCore *build();
+    template <class ISensorType>
+    SystemBuilder &setOrientationSensor() {
+        config.orientationSensor = new ISensorType();
+        return *this;
+    }
+
+    SystemConfig_t build();
 };
 
 #endif // __CODE_GRAV_SYSTEM_BUILDER_H__

@@ -1,5 +1,5 @@
-#include "system/errors.h"
-#include "system/logger.h"
+#include "system/utils/errors.h"
+#include "system/modules/logger.h"
 #include "system/utils/array_size.h"
 
 const __FlashStringHelper *ErrorTypeStrMap[] = {

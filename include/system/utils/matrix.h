@@ -1,5 +1,5 @@
-#if !defined(__CODE_GRAV_SYSTEM_TYPES_H__)
-#define __CODE_GRAV_SYSTEM_TYPES_H__
+#if !defined(__CODE_GRAV_SYSTEM_UTILS_MATRIX_H__)
+#define __CODE_GRAV_SYSTEM_UTILS_MATRIX_H__
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -12,25 +12,6 @@
 #include <Print.h>
 #include <Printable.h>
 #endif
-
-typedef uint16_t Temperature_t;
-
-typedef struct {
-    int16_t x;
-    int16_t y;
-    int16_t z;
-} Vector3D_t;
-
-typedef struct {
-    Vector3D_t acceleration;
-    Vector3D_t rotation;
-    Vector3D_t magnetometer;
-} OrientationData_t;
-
-typedef struct {
-    OrientationData_t orientation;
-    Temperature_t temperature;
-} SystemData_t;
 
 template <size_t sizeA, size_t sizeB, typename Tarray>
 class Matrix
@@ -215,21 +196,4 @@ Matrix<sizeA, sizeB, Tarray> operator +=(Matrix<sizeA, sizeB, Tarray> &matrix, M
     return matrix;
 }
 
-// class MatrixBuilder {
-// public:
-//     static Matrix<3, 3, uint16_t> BuildOrientationMatrix(const OrientationData_t &data) {
-//         Matrix<3, 3, uint16_t> result;
-//         result[0][0] = data.acceleration.x;
-//         result[0][1] = data.acceleration.y;
-//         result[0][2] = data.acceleration.z;
-//         result[1][0] = data.rotation.x;
-//         result[1][1] = data.rotation.y;
-//         result[1][2] = data.rotation.z;
-//         result[2][0] = data.magnetometer.x;
-//         result[2][1] = data.magnetometer.y;
-//         result[2][2] = data.magnetometer.z;
-//         return result;
-//     }
-// };
-
-#endif // __CODE_GRAV_SYSTEM_TYPES_H__
+#endif // __CODE_GRAV_SYSTEM_UTILS_MATRIX_H__
