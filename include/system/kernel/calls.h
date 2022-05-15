@@ -2,28 +2,33 @@
 #define __CODE_GRAV_SYSTEM_KERNEL_CALLS_H__
 
 #include <WString.h>
+#include <system/utils/types.h>
 
 //
 // TODO: Under development
 //
 
-namespace OsKernel
-{
-
 typedef enum {
-    OS_CALL_UPDATE_SENSORS,
-    OS_CALL_DELIMITER
+    OS_SERVICE_UPDATE_ORIENTATION,
+    OS_SERVICE_REBOOT,
+    OS_SERVICE_DELIMITER
 } KernelService_e;
 
-typedef void (*KernelServicesEntry_f)(void);
+typedef void (*KernelServicesEntry_f)(void *pContext);
 
 typedef struct {
+    KernelService_e            service;
     KernelServicesEntry_f      task;
     const __FlashStringHelper* name;
 } KernelServicesEntry_t;
 
+namespace OsKernel
+{
+
 extern KernelServicesEntry_t KernelServicesCallTable[];
 extern const size_t KernelServicesCallTableSize;
+
+extern void OsCall(KernelService_e service, void *pContext);
 
 } // namespace OsKernel
 

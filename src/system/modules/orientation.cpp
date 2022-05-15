@@ -1,5 +1,6 @@
 #include "system/modules/orientation.h"
 #include "system/drivers/mpu9250.h"
+#include "system/kernel/core.h"
 
 Matrix<3, 1, int16_t>  fromVector3D_t(Vector3D_t origin) {
     Matrix<3, 1, int16_t>  vec;
@@ -18,16 +19,7 @@ class OrientationFilter {
     Matrix<3, 3, float> GirCorrection;
     Matrix<3, 3, float> MagCorrection;
 
-    Matrix<3, 1, float> AccMeasures;
-    Matrix<3, 1, float> GirMeasures;
-    Matrix<3, 1, float> MagMeasures;
-public:
-    OrientationFilter (
-        OrientationData_t* ptr
-    );
-
-    bool Calibrate();
-
-private:
-    void getMeasuresInRest ();
+    Matrix<3, 1, int16_t> AccMeasures;
+    Matrix<3, 1, int16_t> GirMeasures;
+    Matrix<3, 1, int16_t> MagMeasures;
 };

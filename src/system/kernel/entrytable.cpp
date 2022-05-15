@@ -1,5 +1,6 @@
 #include "system/kernel/entrytable.h"
 #include "system/utils/array_size.h"
+#include "system/kernel/nvstorage.h"
 #include "kernel_internal.h"
 
 BootModesCallTableEntry_t OsKernel::BootModesCallTable[] = {
@@ -20,6 +21,7 @@ OsKernelEntryTask_t OsKernel::KernelTaskTable[] = {
     { OsKernel::OsInitBLE,                  F("Kernel: Init BLE")             },
     { OsKernel::OsInitSensors,              F("Kernel: Init Sensors")         },
     { OsKernel::OsInitTasks,                F("Kernel: Setup tasks")          },
+    { OsKernel::NvStorageInit,              F("Kernel: Init NVROM"),          },
     { OsKernel::OsSetBootMode,              F("Kernek: Define Boot Mode")     }
 };
 

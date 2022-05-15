@@ -2,26 +2,49 @@
 #include "system/modules/logger.h"
 #include "system/utils/sensor_state_str.h"
 #include "system/utils/errors.h"
+#include "system/utils/i2c.h"
+#include "system/kernel/core.h"
 
 #define __SENSOR_ADDRESS MPU9250_DEFAULT_ADDRESS
 
 SensorMPU9250::SensorMPU9250()
-    : device(__SENSOR_ADDRESS), id(0), firstReadDone(false)
+    : device(__SENSOR_ADDRESS), firstReadDone(false)
 {
 }
 
 bool SensorMPU9250::init() {
     logger << LOG_DEBUG << F("Initializing Sensor MPU9250") << EndLine;
     this->device.initialize();
-    this->state = SENSOR_OK;
-    logger << LOG_DEBUG << F("Testing connection...") << EndLine;
-    this->id = this->device.getDeviceID();
-    if (!this->device.testConnection()) {
-        logger << LOG_DEBUG << F("device.testConnection was false!") << EndLine;
-        this->state = SENSOR_ERROR_ON_CONNECT;
-        return false;
+    logger << LOG_DEBUG << F("Testing connection... ");
+    this->checkState();
+    switch (this->state)
+    {
+    case SENSOR_OK:
+        logger << LOGGER_TEXT_GREEN << F("Ok") << EndLine;
+        break;
+    case SENSOR_NOT_FOUND:
+        logger << LOGGER_TEXT_RED << F("Not found") << EndLine;
+        break;
+    case SENSOR_ERROR_ON_CONNECT:
+        logger << LOGGER_TEXT_RED << F("Error to connect") << EndLine;
+        break;    
+    default:
+        logger << LOGGER_TEXT_YELLOW << F("UNKNOWN") << EndLine;
+        break;
     }
-    return true;
+    return this->state == SENSOR_OK;
+}
+
+SensorState_e SensorMPU9250::checkState () {
+    this->state = SENSOR_OK;
+    if (!isI2CDeviceConnected(*OsKernel::OsGetSysConfigPtr()->i2cBus, __SENSOR_ADDRESS)) {
+        this->state = SENSOR_NOT_FOUND;
+    }
+    if (!this->device.testConnection()) {
+        this->state = SENSOR_ERROR_ON_CONNECT;
+    }
+
+    return this->state;
 }
 
 bool SensorMPU9250::update() {
@@ -49,8 +72,7 @@ bool SensorMPU9250::update() {
 void SensorMPU9250::dumpInfo() {
     logger << LOG_DEBUG << F("Sensor MPU9250:") << EndLine
             << LOG_DEBUG << F("\tState: ") << GetSensorStateStr(this->state) << EndLine
-            << LOG_DEBUG << F("\tType: I2C, address: 0x") << INT_HEX << (uint8_t)__SENSOR_ADDRESS << EndLine
-            << LOG_DEBUG << F("\tID: ") << this->id << EndLine;
+            << LOG_DEBUG << F("\tType: I2C, address: 0x") << INT_HEX << (uint8_t)__SENSOR_ADDRESS << EndLine;
 
     if (this->firstReadDone) {
         Vector3D_t *pAcceleration = &this->acc;

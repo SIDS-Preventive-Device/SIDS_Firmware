@@ -19,6 +19,7 @@ protected:
 public:
     virtual bool init () = 0;
     virtual bool update () = 0;
+    virtual SensorState_e checkState () = 0;
     virtual void dumpInfo () = 0;
 
     virtual ~ISensor() {}
@@ -33,6 +34,7 @@ public:
     Vector3D_t getAccVector() const { return acc; }
     Vector3D_t getGiroVector() const { return giro; }
     Vector3D_t getMagVector() const { return mag; }
+
 };
 
 #endif // __CODE_GRAV_SYSTEM_DEF_INTERFACES_H__

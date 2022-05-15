@@ -10,9 +10,8 @@
 
 class TwoWire;
 class HardwareSerial;
-class BluetoothSerial;
 
-#define KERNEL_VERSION F("0.2.1")
+#define KERNEL_VERSION F("0.2.3")
 
 typedef struct {
     uint32_t        baudrate;
@@ -31,7 +30,6 @@ namespace OsKernel
 {
 
 extern void OsInit(SystemConfig_t config);
-extern void OsCall(KernelService_e);
 
 extern SystemConfig_t* OsGetSysConfigPtr ();
 

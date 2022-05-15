@@ -18,6 +18,14 @@ KernelLogger logger (nullptr);
 SystemConfig_t      OsKernel::configuration;
 SystemBootMode_t    OsKernel::bootMode;
 TaskHandle_t        OsKernel::systemMainTask_h;
+esp_timer_handle_t  OsKernel::rfshSensorState_h;
+
+esp_timer_create_args_t refreshSensorState = {
+    .callback = KERNEL_CALLBACK_NAME(UPDATE_SERVICES_CB),
+    .arg = NULL,
+    .dispatch_method = ESP_TIMER_TASK,
+    .name = "RefreshSensorsState"
+};
 
 using OsKernel::configuration;
 using OsKernel::bootMode;
@@ -26,6 +34,7 @@ using OsKernel::BootModesCallTable;
 using OsKernel::BootModesCallTableSize;
 using OsKernel::KernelTaskTable;
 using OsKernel::KernelTaskTableSize;
+using OsKernel::rfshSensorState_h;
 
 SystemBootMode_t OsKernel::OsGetBootMode()
 {
@@ -48,6 +57,7 @@ void OsKernel::OsInit(SystemConfig_t config)
 
     logger << LOG_MASTER << F("Initialization done") << EndLine;
 
+    esp_timer_start_periodic(rfshSensorState_h, 60000000UL);
     xTaskNotify(systemMainTask_h, 0x00, eNoAction);
 
     vTaskDelete(NULL);
@@ -108,6 +118,8 @@ bool OsKernel::OsInitSensors()
         return false;
     }
 
+    esp_timer_create(&refreshSensorState, &rfshSensorState_h);
+
     return true;
 }
 
@@ -150,16 +162,13 @@ bool OsKernel::OsDumpSysInfo()
     F("   \\____/ \\___/  \\__,_| \\___| \\____/|_|    \\__,_|  \\_/  \n") <<
     F("--------------------------------------------------------\n") <<
     LOG_MASTER << F("Fimware version: ") << KERNEL_VERSION << EndLine <<
-    LOG_MASTER << F("Build date: ") << __DATE__ << F(" ") << __TIME__ << EndLine << EndLine;
+    LOG_MASTER << F("Build date: ") << __DATE__ << F(" ") << __TIME__ << EndLine <<
+    LOG_MASTER << F("Chip revision: ") << ESP.getChipRevision() << EndLine <<
+    LOG_MASTER << F("Clock Speed: ") << ESP.getCpuFreqMHz() << F("mHz") << EndLine;
 
     DumpI2Cdevices(*configuration.i2cBus);
 
     return true;
-}
-
-void OsCall(OsKernel::KernelService_e call)
-{
-    LogKernelError("OsCall is not implemented yet");
 }
 
 SystemConfig_t* OsKernel::OsGetSysConfigPtr () {

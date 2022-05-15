@@ -55,6 +55,32 @@ public:
     size_t rows() const { return sizeA; }
     size_t elements() const { return sizeA * sizeB; }
 
+    Tarray magnitude() {
+        Tarray result;
+        size_t indexA = 0;
+        size_t indexB = 0;
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                result += array[indexA][indexB] * array[indexA][indexB];
+            }
+        }
+
+        return result;
+    }
+
+    void normalize() {
+        Tarray mag = (Tarray)sqrt(this->magnitude());
+        size_t indexA = 0;
+        size_t indexB = 0;
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                array[indexA][indexB] /= mag;
+            }
+        }
+    }
+
     Matrix<sizeA, sizeB, Tarray> operator +(Matrix const &matrix) {
         Matrix<sizeA, sizeB, Tarray> result;
         size_t indexA = 0;
@@ -69,7 +95,8 @@ public:
         return result;
     }
 
-    Matrix<sizeA, sizeB, Tarray> operator +(int const &constant) {
+    template <typename Tconst>
+    Matrix<sizeA, sizeB, Tarray> operator +(Tconst const &constant) {
         Matrix<sizeA, sizeB, Tarray> result;
         size_t indexA = 0;
         size_t indexB = 0;
@@ -83,7 +110,8 @@ public:
         return result;
     }
 
-    Matrix<sizeA, sizeB, Tarray> operator *(int const &constant) {
+    template <typename Tconst>
+    Matrix<sizeA, sizeB, Tarray> operator *(Tconst const &constant) {
         Matrix<sizeA, sizeB, Tarray> result;
         size_t indexA = 0;
         size_t indexB = 0;
@@ -104,7 +132,6 @@ public:
         size_t indexB = 0;
         size_t indexC = 0;
 
-
         for (indexA = 0; indexA < sizeA; indexA++) {
             for (indexC = 0; indexC < sizeC; indexC++) {
                 result[indexA][indexC] = 0;
@@ -114,6 +141,20 @@ public:
             }
         }
         
+        return result;
+    }
+
+    Tarray operator ^(Matrix<sizeA, sizeB, Tarray> &matrix2) {
+        Tarray result;
+        size_t indexA = 0;
+        size_t indexB = 0;
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                result += array[indexA][indexB] * matrix2.array[indexA][indexB];
+            }
+        }
+
         return result;
     }
 
@@ -169,7 +210,22 @@ public:
 };
 
 template <size_t sizeA, size_t sizeB, typename Tarray>
-Matrix<sizeA, sizeB, Tarray> operator *=(Matrix<sizeA, sizeB, Tarray> &matrix, int const &constant) {
+Tarray operator ^=(Matrix<sizeA, sizeB, Tarray> &matrix, Matrix<sizeA, sizeB, Tarray> &matrix2) {
+    Tarray result;
+    size_t indexA = 0;
+    size_t indexB = 0;
+
+    for (indexA = 0; indexA < sizeA; indexA++) {
+        for (indexB = 0; indexB < sizeB; indexB++) {
+            result += matrix.array[indexA][indexB] * matrix2.array[indexA][indexB];
+        }
+    }
+
+    return result;
+}
+
+template <size_t sizeA, size_t sizeB, typename Tarray, typename Tconst>
+Matrix<sizeA, sizeB, Tarray> operator *=(Matrix<sizeA, sizeB, Tarray> &matrix, Tconst const &constant) {
     size_t indexA = 0;
     size_t indexB = 0;
 
@@ -178,7 +234,7 @@ Matrix<sizeA, sizeB, Tarray> operator *=(Matrix<sizeA, sizeB, Tarray> &matrix, i
             matrix.array[indexA][indexB] *= constant;
         }
     }
-    
+
     return matrix;
 }
 

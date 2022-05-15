@@ -2,7 +2,7 @@
 
 #include <system/modules/logger.h>
 
-static bool isI2CDeviceConnected(TwoWire &bus, uint8_t address)
+bool isI2CDeviceConnected(TwoWire &bus, uint8_t address)
 {
     uint8_t error;
     bus.beginTransmission(address);

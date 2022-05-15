@@ -94,6 +94,22 @@ public:
     inline T &operator[](int index);
     inline T &operator[](size_t &i) { return this->get(i); }
     inline const T &operator[](const size_t &i) const { return this->get(i); }
+
+    template <typename Tout>
+    Tout reduce(
+        void (*callback)(Tout* prev, T current)
+    ) {
+        if (_size < 2) {
+            return (Tout)root->data;
+        }
+        ListNode<T> *node = root;
+        Tout result;
+        while (node != NULL) {
+            callback(&result, node->data);
+            node = node->next;
+        }
+        return result;
+    }
 };
 
 // Initialize LinkedList with false values

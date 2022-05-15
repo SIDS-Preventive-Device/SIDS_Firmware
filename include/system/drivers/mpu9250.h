@@ -13,8 +13,6 @@ class SensorMPU9250 : public IOrientationSensor
 {
 private:
     MPU9250 device;
-    uint8_t id;
-
     bool firstReadDone;
 
 public:
@@ -23,6 +21,7 @@ public:
     bool init();
     bool update();
     void dumpInfo();
+    SensorState_e checkState ();
 };
 
 #endif // __CODE_GRAV_SYSTEM_DRIVERS_MPU_9250_H__
