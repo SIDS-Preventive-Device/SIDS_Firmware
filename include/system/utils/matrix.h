@@ -267,7 +267,7 @@ Matrix<sizeA, sizeB, Tarray> operator +=(Matrix<sizeA, sizeB, Tarray> &matrix, M
 }
 
 template <size_t sizeA, size_t sizeB, typename Tarray>
-Matrix<sizeA, sizeB, Tarray> operator +=(Matrix<sizeA, sizeB, Tarray> &matrix, Tarray const &add) {
+Matrix<sizeA, sizeB, Tarray> operator +=(Matrix<sizeA, sizeB, Tarray> &matrix, Tarray add) {
     size_t indexA = 0;
     size_t indexB = 0;
 

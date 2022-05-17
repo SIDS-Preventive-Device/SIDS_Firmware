@@ -25,7 +25,7 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
     Matrix<3, 1, int16_t> giroscopeOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(GiroscopeCalibration).toMatrix();
     Matrix<3, 1, int16_t> dummyOffsets;
     Matrix<3, 3, float> dummyCorrection;
-    dummyCorrection += 1;
+    dummyCorrection += 1.0f;
 
     OrientationParams_t params = {
         .giroscopeOffsets = giroscopeOffsets,
