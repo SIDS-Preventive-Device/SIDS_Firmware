@@ -5,6 +5,7 @@
 #include "system/kernel/calls.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "ble_uuids.h"
 
 #define KERNEL_SERVICE_NAME(__service) __kernel_service ## __service
 #define KERNEL_SERVICE(__service) void KERNEL_SERVICE_NAME(__service) (void *pContext)
@@ -30,6 +31,12 @@ extern TaskHandle_t systemMainTask_h;
 extern esp_timer_handle_t rfshSensorState_h;
 
 extern ISensor* rotationSensor;
+
+extern void SetBLECharacteristicValue (KernelBleCharecteristics_e cht, void* data, size_t len);
+extern void SetBLECharacteristicValue (KernelBleCharecteristics_e cht, String parameter);
+extern void SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint16_t parameter);
+extern void SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint32_t parameter);
+extern void SetBLECharacteristicValue (KernelBleCharecteristics_e cht, int32_t parameter);
 
 } // namespace OsKernel
 

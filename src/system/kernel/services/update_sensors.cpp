@@ -7,7 +7,6 @@ KERNEL_CALLBACK(UPDATE_SERVICES_CB) {
 }
 
 KERNEL_SERVICE(OS_SERVICE_UPDATE_ORIENTATION) {
-
     SystemConfig_t *config = OsKernel::OsGetSysConfigPtr();
     OrientationData_t *pData = (OrientationData_t*)pContext;
     bool success = false;
@@ -26,4 +25,6 @@ KERNEL_SERVICE(OS_SERVICE_UPDATE_ORIENTATION) {
     pData->acceleration  = config->orientationSensor->getAccVector();
     pData->rotation      = config->orientationSensor->getGiroVector();
     pData->magnetometer  = config->orientationSensor->getMagVector();
+
+    OsKernel::SetBLECharacteristicValue (BLE_CHT_POSITION, pData, sizeof (OrientationData_t));
 }

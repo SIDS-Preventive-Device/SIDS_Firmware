@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <Printable.h>
 #include <Print.h>
+#include "matrix.h"
 
 typedef uint16_t Temperature_t;
 
@@ -15,6 +16,14 @@ struct Vector3D_t : Printable {
     virtual size_t printTo(Print& p) const {
         return p.printf("[%04i %04i %04i]", x, y, z);
     };
+
+    Matrix<3, 1, int16_t>  toMatrix() {
+        Matrix<3, 1, int16_t>  vec;
+        vec[0][0] = x;
+        vec[1][0] = y;
+        vec[2][0] = z;
+        return vec;
+    }
 };
 
 typedef struct Vector3D_t Vector3D_t;

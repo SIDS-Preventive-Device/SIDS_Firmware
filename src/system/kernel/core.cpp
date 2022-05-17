@@ -9,9 +9,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <Arduino.h>
-#include <BluetoothSerial.h>
 #include <Wire.h>
-#include "esp_bt_device.h"
 
 KernelLogger logger (nullptr);
 
@@ -51,15 +49,19 @@ void OsKernel::OsInit(SystemConfig_t config)
         logger << LOG_MASTER << LOGGER_TEXT_YELLOW << KernelTaskTable[index].name << EndLine;
         if (!KernelTaskTable[index].task()) {
             LogKernelError ("Task return false, panic error!");
-            assert(true);
+            while (true) { }
         }
+    }
+
+    if (rfshSensorState_h == NULL) {
+        logger << LOG_ERROR << F("Refresh sensors is disabled!") << EndLine;
+    } else {
+        esp_timer_start_periodic (rfshSensorState_h, 60000000UL);
     }
 
     logger << LOG_MASTER << F("Initialization done") << EndLine;
 
-    esp_timer_start_periodic(rfshSensorState_h, 60000000UL);
-    xTaskNotify(systemMainTask_h, 0x00, eNoAction);
-
+    xTaskNotify (systemMainTask_h, 0x00, eNoAction);
     vTaskDelete(NULL);
 }
 
@@ -118,7 +120,10 @@ bool OsKernel::OsInitSensors()
         return false;
     }
 
-    esp_timer_create(&refreshSensorState, &rfshSensorState_h);
+    if (esp_timer_create(&refreshSensorState, &rfshSensorState_h) != ESP_OK) {
+        LogKernelError ("Fail to initialize refresh sensor state");
+        return false;
+    }
 
     return true;
 }
@@ -133,7 +138,7 @@ bool OsKernel::OsInitTasks()
 
             if (!entryPoint) {
                 LogKernelError("Not found entry point for current boot mode!!!");
-                assert(true);
+                assert(false);
                 vTaskDelete(NULL);
             }
 
@@ -141,10 +146,10 @@ bool OsKernel::OsInitTasks()
 
             LogKernelError("System error, kernel out-phase code reached, this is Fatal!");
 
-            assert(true);
+            assert(false);
             vTaskDelete(NULL);
         },
-        "CodeGrav_Kernel", 0x8000, NULL, 1, &systemMainTask_h, 1
+        "CodeGrav_Kernel", 0x4000, NULL, 1, &systemMainTask_h, 1
     );
 
     return true;
@@ -173,38 +178,4 @@ bool OsKernel::OsDumpSysInfo()
 
 SystemConfig_t* OsKernel::OsGetSysConfigPtr () {
     return &OsKernel::configuration;
-}
-
-bool OsKernel::OsInitBLE()
-{
-    if (configuration.blePort == nullptr) {
-        logger << LOG_WARN << F("Bluetooth not specified, BLE functionality disabled!") << EndLine;
-        return true;
-    }
-    if (configuration.bleDeviceName == nullptr) {
-        configuration.bleDeviceName = F("CodeGravOs");
-        logger << LOG_WARN << F("Bluetooth device not provided, using default: ") << configuration.bleDeviceName << EndLine;
-    }
-
-    bool rslt = configuration.blePort->begin(configuration.bleDeviceName);
-    if (!rslt) {
-        LogMinorError("Unable to initialize BLE Port!");
-        return true;
-    }
-
-    logger << LOG_MASTER << F("BLE Initialized as ") << LOGGER_TEXT_GREEN << configuration.bleDeviceName << EndLine;
-
-    rslt = wait([](void *pContext) -> bool {
-        return OsKernel::configuration.blePort->isReady() && OsKernel::configuration.blePort->hasClient();
-    }, NULL, 10000UL, &logger);
-
-    if (!rslt) {
-        LogMinorError("No connection detected, shutdown BLE");
-        configuration.blePort->end();
-        return true;
-    }
-
-    logger << LOG_MASTER << F("Device connected!") << EndLine;
-
-    return true;
 }

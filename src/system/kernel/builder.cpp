@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <Wire.h>
-#include <BluetoothSerial.h>
 
 SystemBuilder::SystemBuilder()
 {
@@ -41,7 +40,6 @@ SystemConfig_t SystemBuilder::build()
 
 SystemBuilder &SystemBuilder::enableBLE(const __FlashStringHelper* bleDeviceName)
 {
-    this->config.blePort = new BluetoothSerial();
     this->config.bleDeviceName = bleDeviceName;
     return *this;
 }

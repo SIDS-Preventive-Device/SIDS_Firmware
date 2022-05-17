@@ -11,7 +11,7 @@
 class TwoWire;
 class HardwareSerial;
 
-#define KERNEL_VERSION F("0.2.3")
+#define KERNEL_VERSION F("0.2.4")
 
 typedef struct {
     uint32_t        baudrate;
@@ -20,7 +20,6 @@ typedef struct {
 
     TwoWire*        i2cBus;
 
-    BluetoothSerial* blePort;
     const __FlashStringHelper* bleDeviceName;
 
     IOrientationSensor *orientationSensor;

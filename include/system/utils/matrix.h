@@ -95,6 +95,20 @@ public:
         return result;
     }
 
+    Matrix<sizeA, sizeB, Tarray> operator -(Matrix const &matrix) {
+        Matrix<sizeA, sizeB, Tarray> result;
+        size_t indexA = 0;
+        size_t indexB = 0;
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                result[indexA][indexB] = matrix[indexA][indexB] - array[indexA][indexB];
+            }
+        }
+
+        return result;
+    }
+
     template <typename Tconst>
     Matrix<sizeA, sizeB, Tarray> operator +(Tconst const &constant) {
         Matrix<sizeA, sizeB, Tarray> result;
@@ -136,7 +150,7 @@ public:
             for (indexC = 0; indexC < sizeC; indexC++) {
                 result[indexA][indexC] = 0;
                 for (indexB = 0; indexB < sizeB; indexB++) {
-                    result[indexA][indexC] += array[indexA][indexB] * matrix2.array[indexB][indexC];
+                    result[indexA][indexC] += array[indexA][indexB] * matrix2[indexB][indexC];
                 }
             }
         }
@@ -151,7 +165,7 @@ public:
 
         for (indexA = 0; indexA < sizeA; indexA++) {
             for (indexB = 0; indexB < sizeB; indexB++) {
-                result += array[indexA][indexB] * matrix2.array[indexA][indexB];
+                result += array[indexA][indexB] * matrix2[indexA][indexB];
             }
         }
 
@@ -217,7 +231,7 @@ Tarray operator ^=(Matrix<sizeA, sizeB, Tarray> &matrix, Matrix<sizeA, sizeB, Ta
 
     for (indexA = 0; indexA < sizeA; indexA++) {
         for (indexB = 0; indexB < sizeB; indexB++) {
-            result += matrix.array[indexA][indexB] * matrix2.array[indexA][indexB];
+            result += matrix[indexA][indexB] * matrix2[indexA][indexB];
         }
     }
 
@@ -231,7 +245,7 @@ Matrix<sizeA, sizeB, Tarray> operator *=(Matrix<sizeA, sizeB, Tarray> &matrix, T
 
     for (indexA = 0; indexA < sizeA; indexA++) {
         for (indexB = 0; indexB < sizeB; indexB++) {
-            matrix.array[indexA][indexB] *= constant;
+            matrix[indexA][indexB] *= constant;
         }
     }
 
@@ -245,11 +259,54 @@ Matrix<sizeA, sizeB, Tarray> operator +=(Matrix<sizeA, sizeB, Tarray> &matrix, M
 
     for (indexA = 0; indexA < sizeA; indexA++) {
         for (indexB = 0; indexB < sizeB; indexB++) {
-            matrix.array[indexA][indexB] += add.array[indexA][indexB];
+            matrix[indexA][indexB] += add[indexA][indexB];
         }
     }
 
     return matrix;
 }
+
+template <size_t sizeA, size_t sizeB, typename Tarray>
+Matrix<sizeA, sizeB, Tarray> operator +=(Matrix<sizeA, sizeB, Tarray> &matrix, Tarray const &add) {
+    size_t indexA = 0;
+    size_t indexB = 0;
+
+    for (indexA = 0; indexA < sizeA; indexA++) {
+        for (indexB = 0; indexB < sizeB; indexB++) {
+            matrix[indexA][indexB] += add;
+        }
+    }
+
+    return matrix;
+}
+
+template <size_t sizeA, size_t sizeB, typename Tarray>
+Matrix<sizeA, sizeB, Tarray> operator -=(Matrix<sizeA, sizeB, Tarray> &matrix, Matrix<sizeA, sizeB, Tarray> const &add) {
+    size_t indexA = 0;
+    size_t indexB = 0;
+
+    for (indexA = 0; indexA < sizeA; indexA++) {
+        for (indexB = 0; indexB < sizeB; indexB++) {
+            matrix[indexA][indexB] -= add[indexA][indexB];
+        }
+    }
+
+    return matrix;
+}
+
+template <size_t sizeA, size_t sizeB, typename Tarray>
+Matrix<sizeA, sizeB, Tarray> operator -=(Matrix<sizeA, sizeB, Tarray> &matrix, Tarray const &add) {
+    size_t indexA = 0;
+    size_t indexB = 0;
+
+    for (indexA = 0; indexA < sizeA; indexA++) {
+        for (indexB = 0; indexB < sizeB; indexB++) {
+            matrix[indexA][indexB] -= add;
+        }
+    }
+
+    return matrix;
+}
+
 
 #endif // __CODE_GRAV_SYSTEM_UTILS_MATRIX_H__

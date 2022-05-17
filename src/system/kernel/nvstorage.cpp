@@ -78,13 +78,14 @@ bool __NvStorageInternalRead<char*>(const char* key, char** data) {
 template<>
 bool __NvStorageInternalRead<Blob_t>(const char* key, Blob_t* data) {
     size_t size = 0;
+    logger << LOG_DEBUG << F("NVStorage: Variable ") << key;
     esp_err_t err = nvs_get_blob(storage_h, key, NULL, &size);
     if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND)
     {
+        logger << LOGGER_TEXT_RED << F(" error") << EndLine;
         return false;
     }
 
-    logger << LOG_DEBUG << F("NVStorage: Variable ") << key;
     if (size == 0) {
         logger << LOGGER_TEXT_RED << F(" not found") << EndLine;
         return false;

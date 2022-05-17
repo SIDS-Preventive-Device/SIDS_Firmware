@@ -34,7 +34,20 @@ public:
     Vector3D_t getAccVector() const { return acc; }
     Vector3D_t getGiroVector() const { return giro; }
     Vector3D_t getMagVector() const { return mag; }
+};
 
+class IBatterySensor : public ISensor {
+protected:
+    uint8_t batteryLevel;
+public:
+    uint8_t getBatteryLevel() const { return batteryLevel; }
+};
+
+class ITemperatureSensor : public ISensor {
+protected:
+    uint8_t temperatureLevel;
+public:
+    uint8_t getTemperatureLevel() const { return temperatureLevel; }
 };
 
 #endif // __CODE_GRAV_SYSTEM_DEF_INTERFACES_H__
