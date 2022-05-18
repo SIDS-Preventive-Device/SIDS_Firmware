@@ -9,6 +9,7 @@
 #include <iostream>
 #endif
 #if defined(ARDUINO)
+#include <WString.h>
 #include <Print.h>
 #include <Printable.h>
 #endif
@@ -37,6 +38,19 @@ public:
         for (indexA = 0; indexA < sizeA; indexA++) {
             for (indexB = 0; indexB < sizeB; indexB++) {
                 array[indexA][indexB] = inputArray[indexA][indexB];
+            }
+        }
+    }
+
+    template <typename Tarray2>
+    Matrix(Matrix<sizeA, sizeB, Tarray2> const &input) {
+        memset(array, 0x00, sizeof(Tarray) * sizeA * sizeB);
+        size_t indexA = 0;
+        size_t indexB = 0;
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                array[indexA][indexB] = input[indexA][indexB];
             }
         }
     }
@@ -193,8 +207,20 @@ public:
     }
 
 #if defined(ARDUINO)
+
+    String toString() {
+        String str;
+        size_t indexA = 0;
+        size_t indexB = 0;
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                str += String(array[indexA][indexB]) + " ";
+            }
+        }
+        return str;
+    }
+
     size_t printTo(Print& p) const {
-        p.println();
         size_t indexA = 0;
         size_t indexB = 0;
         size_t c = 0;
@@ -203,7 +229,6 @@ public:
                 c += p.print(String(array[indexA][indexB]));
                 c += p.print(F(" "));
             }
-            p.println();
         }
         return c;
     }

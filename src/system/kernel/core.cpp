@@ -93,7 +93,7 @@ bool OsKernel::OsInitBuses()
     }
 
     if (configuration.i2cBus != nullptr) {
-        configuration.i2cBus->begin();
+        configuration.i2cBus->begin(-1, -1, 400000L);
     } else {
         LogKernelError ("I2C Bus instance is NULL!!!");
         return false;

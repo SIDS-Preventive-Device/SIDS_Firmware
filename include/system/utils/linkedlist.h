@@ -103,7 +103,7 @@ public:
             return (Tout)root->data;
         }
         ListNode<T> *node = root;
-        Tout result;
+        Tout result = Tout();
         while (node != NULL) {
             callback(&result, node->data);
             node = node->next;

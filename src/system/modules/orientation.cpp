@@ -1,42 +1,32 @@
 #include "system/modules/orientation.h"
 #include "system/drivers/mpu9250.h"
 #include "system/kernel/core.h"
+#include "system/kernel/ble.h"
 
 Matrix<3, 1, float> CalculateOrientation(OrientationParams_t params)
 {
     OrientationData_t orientationData;
     Matrix<3, 1, float> result;
     Matrix<3, 1, int16_t> temp;
-    uint64_t startTc;
-    uint64_t endTc;
 
     OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
 
     //
     // Calibrate giroscope measure
     //
-    startTc = micros();
-    Matrix<3, 1, int16_t> vGiro = (orientationData.rotation.toMatrix() - params.giroscopeOffsets) * params.giroScale;
-    endTc = micros();
-    logger << LOG_INFO << F("Execution time: ") << (uint32_t)(startTc - endTc) << F("us") << EndLine;
-    
-    startTc = micros();
+    // logger << LOG_DEBUG << F("vGiro = (") << orientationData.rotation.toMatrix() << ") - (" << params.giroscopeOffsets << ") * " << params.giroScale << EndLine;
+    Matrix<3, 1, float> vGiro = (orientationData.rotation.toMatrix() - params.giroscopeOffsets) * params.giroScale;
+
+    // logger << LOG_DEBUG << F("vAcc = (") << orientationData.acceleration.toMatrix() << ") - (" << params.accelerometerOffsets << ") * " << params.accelerometerCorrection << EndLine;
     temp = orientationData.acceleration.toMatrix() - params.accelerometerOffsets;
     Matrix<3, 1, float> vAcc = params.accelerometerCorrection * temp;
-    endTc = micros();
-    logger << LOG_INFO << F("Execution time: ") << (uint32_t)(startTc - endTc) << F("us") << EndLine;
 
-    startTc = micros();
     temp = orientationData.magnetometer.toMatrix() - params.magnetometerOffsets;
     Matrix<3, 1, float> vMag = params.magnetometerCorrection * temp;
-    endTc = micros();
-    logger << LOG_INFO << F("Execution time: ") << (uint32_t)(startTc - endTc) << F("us") << EndLine;
 
-    logger << LOG_INFO << vGiro << EndLine;
-    logger << LOG_INFO << vAcc << EndLine;
-    logger << LOG_INFO << vMag << EndLine;
+    OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, vGiro.toString());
 
-    return result;
+    return vGiro;
 }
 
 MahonyFilter::MahonyFilter() {}

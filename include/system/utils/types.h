@@ -14,7 +14,7 @@ struct Vector3D_t : Printable {
     int16_t z;
 
     virtual size_t printTo(Print& p) const {
-        return p.printf("[%04i %04i %04i]", x, y, z);
+        return p.printf("[%4d %4d %4d]", x, y, z);
     };
 
     Matrix<3, 1, int16_t>  toMatrix() {

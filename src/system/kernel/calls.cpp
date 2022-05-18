@@ -21,6 +21,6 @@ void OsKernel::OsCall(KernelService_e service, void *pContext)
         return ;
     }
 
-    logger << LOG_DEBUG << F("@Kernel: Call ") << OsKernel::KernelServicesCallTable[service].name << EndLine;
+    // logger << LOG_DEBUG << F("@Kernel: Call ") << OsKernel::KernelServicesCallTable[service].name << EndLine;
     OsKernel::KernelServicesCallTable[service].task(pContext);
 }

@@ -25,14 +25,14 @@ typedef struct {
     BLEService* pService;
 } BLEService_t;
 
-BLEService_t ServicesTable[] = {
+BLEService_t ServicesTable[BLE_SERV_DELIM] = {
     { POSITION_SERVICE_UUID,            "PositionService",          NULL },
     { TEMPERATURE_SERVICE_UUID,         "TemperatureService",       NULL },
     { BATTERY_SERVICE_UUID,             "BatteryService",           NULL },
     { DEVICE_INFO_SERVICE_UUID,         "DeviceInfoService",        NULL }
 };
 
-BLECharacteristic_t CharacteristicsTable[] = {
+BLECharacteristic_t CharacteristicsTable[BLE_CHT_DELIM] = {
     { BLE_SERV_POSITION,            POSITION_CHARACTERISTIC_UUID,           new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ || BLECharacteristic::PROPERTY_NOTIFY        },
     { BLE_SERV_BATTERY,             BATTERY_LEVEL_CHARACTERISTIC_UUID,      new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                              },
     { BLE_SERV_TEMPERATURE,         TEMPERATURE_CHARACTERISTIC_UUID,        new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                              },
@@ -102,10 +102,14 @@ void DumpCharacteristicsTable() {
     size_t index = 0;
 
     logger << LOG_INFO << F("BLE Characteristics Services Status Table") << EndLine;
-    logger.printf("%20s | %40s | %13s\n", "Service", "UUID", "Descriptor");
+    logger.printf("%20s | %40s | %13s | %20s\n", "Service", "UUID", "Init", "Value");
     for (index = 0; index < characteristicsTableSize; index++) {
         pCharactConfig = &CharacteristicsTable[index];
-        logger.printf("%20s | %40s | %13s\n", ServicesTable[pCharactConfig->Service].Name, pCharactConfig->UUID, pCharactConfig->Characteristic == NULL ? "--" : "OK");
+        logger.printf("%20s | %40s | %13s | %20s\n",
+            ServicesTable[pCharactConfig->Service].Name,
+            pCharactConfig->UUID,
+            pCharactConfig->Characteristic == NULL ? "--" : "OK",
+            pCharactConfig->Characteristic == NULL ? "" : pCharactConfig->Characteristic->getValue().c_str());
     }
 }
 
@@ -122,7 +126,7 @@ bool validateCharacteristicInit (KernelBleCharecteristics_e cht) {
 }
 
 void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, void* data, size_t len) {
-    if (validateCharacteristicInit(cht)) {
+    if (!validateCharacteristicInit(cht)) {
         return;
     }
 
@@ -139,7 +143,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, void* 
 
 void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, String parameter)
 {
-    if (validateCharacteristicInit(cht)) {
+    if (!validateCharacteristicInit(cht)) {
         return;
     }
 
@@ -151,7 +155,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, String
 
 void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint16_t parameter)
 {
-    if (validateCharacteristicInit(cht)) {
+    if (!validateCharacteristicInit(cht)) {
         return;
     }
 
@@ -163,7 +167,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint16
 
 void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint32_t parameter)
 {
-    if (validateCharacteristicInit(cht)) {
+    if (!validateCharacteristicInit(cht)) {
         return;
     }
 
@@ -175,7 +179,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint32
 
 void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, int32_t parameter)
 {
-    if (validateCharacteristicInit(cht)) {
+    if (!validateCharacteristicInit(cht)) {
         return;
     }
 
