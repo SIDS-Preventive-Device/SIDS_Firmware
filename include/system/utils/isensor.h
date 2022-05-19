@@ -15,8 +15,17 @@ typedef enum {
 class ISensor {
 protected:
     SensorState_e state;
+    String name;
 
 public:
+    void setName (const char* name) { 
+        this->name = name;
+    }
+
+    const char* getName () const { 
+        return this->name.c_str();
+    }
+
     virtual bool init () = 0;
     virtual bool update () = 0;
     virtual SensorState_e checkState () = 0;

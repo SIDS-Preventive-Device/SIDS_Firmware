@@ -3,30 +3,38 @@
 #include "system/kernel/core.h"
 #include "system/kernel/ble.h"
 
-Matrix<3, 1, float> CalculateOrientation(OrientationParams_t params)
+static MahonyFilter mahony;
+
+QuaternionMatrix_t CalculateOrientation(OrientationParams_t params)
 {
     OrientationData_t orientationData;
-    Matrix<3, 1, float> result;
-    Matrix<3, 1, int16_t> temp;
+    QuaternionMatrix_t result;
 
     OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
 
     //
     // Calibrate giroscope measure
     //
-    // logger << LOG_DEBUG << F("vGiro = (") << orientationData.rotation.toMatrix() << ") - (" << params.giroscopeOffsets << ") * " << params.giroScale << EndLine;
     Matrix<3, 1, float> vGiro = (orientationData.rotation.toMatrix() - params.giroscopeOffsets) * params.giroScale;
+    Matrix<3, 1, float> vAcc = orientationData.acceleration.toMatrix() - params.accelerometerOffsets;
+    Matrix<3, 1, float> vMag = orientationData.acceleration.toMatrix() - params.accelerometerOffsets;
 
-    // logger << LOG_DEBUG << F("vAcc = (") << orientationData.acceleration.toMatrix() << ") - (" << params.accelerometerOffsets << ") * " << params.accelerometerCorrection << EndLine;
-    temp = orientationData.acceleration.toMatrix() - params.accelerometerOffsets;
-    Matrix<3, 1, float> vAcc = params.accelerometerCorrection * temp;
 
-    temp = orientationData.magnetometer.toMatrix() - params.magnetometerOffsets;
-    Matrix<3, 1, float> vMag = params.magnetometerCorrection * temp;
+    //Los ejes estan invertidos por las siguientes razones:
+    // 1.- Por conveniencia y la forma de la placa.
+    // 2.- Los ejes x & y del magnetometro estan invertidos con respecto al acelerometro y magnetometro
+    mahony.MahonyQuaternionUpdate(vAcc[1][0], vAcc[0][0], vAcc[2][0], vGiro[1][0], vGiro[0][0], vGiro[2][0],
+                                    vMag[0][0], vMag[1][0], -vMag[2][0], params.measureInterval);
 
-    OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, vGiro.toString());
+    mahony.getQuaternion(result.getInternalArrayPtr());
 
-    return vGiro;
+    OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, result.toString());
+
+    return result;
+}
+
+uint8_t CalculatePositionRisk (QuaternionMatrix_t quaternions) {
+    return 0;
 }
 
 MahonyFilter::MahonyFilter() {}

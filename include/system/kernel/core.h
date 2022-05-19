@@ -11,7 +11,7 @@
 class TwoWire;
 class HardwareSerial;
 
-#define KERNEL_VERSION F("0.2.5")
+#define KERNEL_VERSION F("0.2.6")
 
 typedef struct {
     uint32_t        baudrate;
@@ -23,6 +23,9 @@ typedef struct {
     const __FlashStringHelper* bleDeviceName;
 
     IOrientationSensor *orientationSensor;
+    IBatterySensor     *batterySensor;
+    ITemperatureSensor *temperatureSensor;
+    IRiskAlert         *riskAlert;
 } SystemConfig_t;
 
 namespace OsKernel

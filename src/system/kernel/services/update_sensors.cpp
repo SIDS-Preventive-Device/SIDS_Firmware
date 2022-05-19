@@ -26,3 +26,6 @@ KERNEL_SERVICE(OS_SERVICE_UPDATE_ORIENTATION) {
     pData->rotation      = config->orientationSensor->getGiroVector();
     pData->magnetometer  = config->orientationSensor->getMagVector();
 }
+
+KERNEL_SERVICE(OS_SERVICE_UPDATE_TEMPERATURE) {
+}

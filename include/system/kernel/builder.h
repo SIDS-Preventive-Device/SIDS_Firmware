@@ -23,6 +23,24 @@ public:
         return *this;
     }
 
+    template <class ISensorType>
+    SystemBuilder &setBatterySensor() {
+        config.batterySensor = new ISensorType();
+        return *this;
+    }
+
+    template <class ISensorType>
+    SystemBuilder &setTemperatureSensor() {
+        config.temperatureSensor = new ISensorType();
+        return *this;
+    }
+
+    template <class ISensorType>
+    SystemBuilder &setRiskAlert() {
+        config.riskAlert = new ISensorType();
+        return *this;
+    }
+
     SystemConfig_t build();
 };
 

@@ -65,6 +65,10 @@ public:
         return array[i];
     }
 
+    inline Tarray *getInternalArrayPtr() const {
+        return &array[0][0];
+    }
+
     size_t cols() const { return sizeB; }
     size_t rows() const { return sizeA; }
     size_t elements() const { return sizeA * sizeB; }

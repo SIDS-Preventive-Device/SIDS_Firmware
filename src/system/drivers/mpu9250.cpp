@@ -27,7 +27,7 @@ bool SensorMPU9250::init() {
         break;
     case SENSOR_ERROR_ON_CONNECT:
         logger << LOGGER_TEXT_RED << F("Error to connect") << EndLine;
-        break;    
+        break;
     default:
         logger << LOGGER_TEXT_YELLOW << F("UNKNOWN") << EndLine;
         break;

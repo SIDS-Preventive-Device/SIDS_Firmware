@@ -25,6 +25,11 @@ esp_timer_create_args_t refreshSensorState = {
     .name = "RefreshSensorsState"
 };
 
+typedef struct {
+    ISensor *sensor;
+    bool required;
+} SensorsEntryTable_t;
+
 using OsKernel::configuration;
 using OsKernel::bootMode;
 using OsKernel::systemMainTask_h;
@@ -110,14 +115,51 @@ bool OsKernel::OsInitLogger()
 
 bool OsKernel::OsInitSensors()
 {
-    if (configuration.orientationSensor == nullptr) {
-        LogKernelError ("There is no orientation sensor defined!!");
-        return false;
+    static SensorsEntryTable_t sensorsTable[] = {
+        { configuration.orientationSensor, true },
+        { configuration.temperatureSensor, false },
+        { configuration.batterySensor, false }
+    };
+    const uint8_t sensorsTableSize = ARRAY_SIZE(sensorsTable);
+    uint8_t index = 0;
+
+    for (index = 0; index < sensorsTableSize; index++) {
+        //
+        // Current sensor interface is undefined?
+        //
+        if (sensorsTable[index].sensor == nullptr) {
+            //
+            // If required throw a kernel error, otherwise only show a warning
+            //
+            if (sensorsTable[index].required) {
+                LogKernelError ("Required sensor interface not provided!");
+                return false;
+            } else {
+                logger << LOG_WARN << F("Sensor interface not provided: ") << sensorsTable[index].sensor->getName() << EndLine;
+                continue;
+            }
+        }
+
+        //
+        // Error on initization?
+        //
+        if (sensorsTable[index].sensor->init() == false) {
+            //
+            // If required throw a kernel error, otherwise only show a warning
+            //
+            if (sensorsTable[index].required) {
+                LogKernelError ("Required sensor interface error on initialization!");
+                return false;
+            } else {
+                logger << LOG_WARN << F("Sensor inteface error on init: ") << sensorsTable[index].sensor->getName() << EndLine;
+            }
+        }
     }
 
-    if (!configuration.orientationSensor->init()) {
-        LogKernelError ("Fail to initialize orientation sensor");
-        return false;
+    if (configuration.riskAlert == nullptr) {
+        logger << LOG_WARN << F("Risk alert provider is not defined, disabling alerts!") << EndLine;
+    } else {
+        configuration.riskAlert->Configure();
     }
 
     if (esp_timer_create(&refreshSensorState, &rfshSensorState_h) != ESP_OK) {

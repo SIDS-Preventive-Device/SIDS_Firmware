@@ -4,10 +4,17 @@
 #include <system/utils/isensor.h>
 #include <system/utils/types.h>
 
+#define DEFAULT_BATTERY_PIN 10
+
 class BatterySensor : public IBatterySensor
 {
+    uint8_t pin;
+    bool firstReadDone;
+
+    uint16_t readMilliVolts ();
+    float readPercentage ();
 public:
-    BatterySensor ();
+    BatterySensor (uint8_t pin = DEFAULT_BATTERY_PIN);
 
     bool init();
     bool update();

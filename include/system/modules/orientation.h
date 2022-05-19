@@ -36,8 +36,14 @@ typedef struct
     Matrix<3, 3, float> accelerometerCorrection;
     Matrix<3, 1, int16_t> magnetometerOffsets;
     Matrix<3, 3, float> magnetometerCorrection;
+
+    uint32_t measureInterval;
 } OrientationParams_t;
 
-extern Matrix<3, 1, float> CalculateOrientation(OrientationParams_t params);
+typedef Matrix<4, 1, float> QuaternionMatrix_t;
+
+extern QuaternionMatrix_t CalculateOrientation (OrientationParams_t params);
+
+extern uint8_t CalculatePositionRisk (QuaternionMatrix_t quaternions);
 
 #endif // __CODE_GRAV_SYSTEM_MODULES_ORIENTATION_H__

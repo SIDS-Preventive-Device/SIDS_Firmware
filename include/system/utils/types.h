@@ -34,4 +34,10 @@ typedef struct {
     Vector3D_t magnetometer;
 } OrientationData_t;
 
+class IRiskAlert {
+public:
+    virtual void Configure () = 0;
+    virtual void Alert(uint32_t milliseconds = 0) const = 0;
+};
+
 #endif // __CODE_GRAV_SYSTEM_UTILS_TYPES_H__

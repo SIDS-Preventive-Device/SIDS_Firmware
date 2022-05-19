@@ -18,6 +18,11 @@
 #define INTERVAL_DEBUG 500
 #define INTERVAL_PRODUCTION 30
 
+#define MEASURE_INTERVAL INTERVAL_PRODUCTION
+#define POST_ALERT_WAIT  1000
+
+#define RISK_THRESHOLD 0
+
 /**
  * @brief Construct a new kernel boot thread this is the entry point for
  *        boot mode normal.
@@ -29,6 +34,8 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
     Matrix<3, 1, int16_t> accOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(AccelerometerCalibration).toMatrix();
     Matrix<3, 1, int16_t> dummyOffsets;
     Matrix<3, 3, float> dummyCorrection;
+    QuaternionMatrix_t quaternionResults;
+    uint8_t calculatedRisk;
     dummyCorrection += 1.0f;
 
     OrientationParams_t params = {
@@ -37,22 +44,37 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
         .accelerometerOffsets = accOffsets,
         .accelerometerCorrection = dummyCorrection,
         .magnetometerOffsets = dummyOffsets,
-        .magnetometerCorrection = dummyCorrection
+        .magnetometerCorrection = dummyCorrection,
+        .measureInterval = MEASURE_INTERVAL
     };
 
     logger << LOG_MASTER << ~giroscopeOffsets << EndLine;
     logger << LOG_MASTER << ~accOffsets << EndLine;
 
-    unsigned long startTc;
-    unsigned long endTc;
-
     while (true) {
-        startTc = micros();
-        CalculateOrientation(params);
-        endTc = micros();
-        logger << LOG_INFO << F("CalculateOrientation - Execution time: ") << (uint32_t)(endTc - startTc) << F("us") << EndLine;
+        //
+        // Calculate quaternion values from orientation sensor using the parameters defined.
+        //
+        quaternionResults = CalculateOrientation(params);
 
-        vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(INTERVAL_DEBUG));
+        //
+        // Determine the risk of the position
+        //
+        calculatedRisk = CalculatePositionRisk(quaternionResults);
+
+        //
+        // Current risk is important enough?
+        //
+        if (calculatedRisk > RISK_THRESHOLD) {
+            //
+            // Alert and activate buzzer!
+            //
+            OsKernel::OsCall(OS_SERVICE_THROW_POSITION_RISK_ALERT, NULL);
+            vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(POST_ALERT_WAIT));
+            continue;
+        }
+
+        vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(MEASURE_INTERVAL));
     }
 }
 
