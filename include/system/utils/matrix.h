@@ -65,7 +65,7 @@ public:
         return array[i];
     }
 
-    inline Tarray *getInternalArrayPtr() const {
+    inline Tarray *getInternalArrayPtr() {
         return &array[0][0];
     }
 

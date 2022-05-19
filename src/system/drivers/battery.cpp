@@ -41,17 +41,18 @@ void BatterySensor::dumpInfo()
             << LOG_DEBUG << F("\tType: ADC, pin: ") << (uint8_t)this->pin << EndLine;
 
     if (this->firstReadDone) {
-        logger << LOG_DEBUG << F("\tBatter Level: ") << this->batteryLevel << "%" << EndLine;
+        logger << LOG_DEBUG << F("\tBattery Level: ") << this->batteryLevel << "%" << EndLine;
     }
 }
 
 SensorState_e BatterySensor::checkState ()
 {
     uint16_t mv = readMilliVolts();
+    this->state = SENSOR_OK;
     if (mv < 2000) {
-        return SENSOR_ERROR_ON_CONNECT;
+        this->state = SENSOR_ERROR_ON_CONNECT;
     }
-    return SENSOR_OK;
+    return this->state;
 }
 
 uint16_t BatterySensor::readMilliVolts ()

@@ -3,6 +3,8 @@
 
 #include <system/kernel/builder.h>
 #include <system/utils/errors.h>
+#include <system/drivers/battery.h>
+#include <system/drivers/buzzer.h>
 #include <system/drivers/mpu9250.h>
 
 void setup() {
@@ -13,7 +15,9 @@ void setup() {
     .setSerialConfig(Serial, 115200)
     .setI2Cport(Wire)
     .setLogLevel(LOG_DEBUG)
+    .setBatterySensor<BatterySensor>()
     .setOrientationSensor<SensorMPU9250>()
+    .setRiskAlert<Buzzer>()
     .enableBLE(F("GravDevice"))
     .build();
 

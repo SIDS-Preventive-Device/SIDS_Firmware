@@ -2,8 +2,21 @@
 #include "system/utils/errors.h"
 #include "system/modules/logger.h"
 
-KERNEL_CALLBACK(UPDATE_SERVICES_CB) {
+KERNEL_CALLBACK(UPDATE_SERVICES_REFRESH_SENSOR_STATE) {
     logger << LOG_INFO << F("Refresh sensor connections") << EndLine;
+}
+
+KERNEL_CALLBACK(UPDATE_SERVICES_BATTERY) {
+    SystemConfig_t *config = OsKernel::OsGetSysConfigPtr();
+    if (config->batterySensor->checkState() != SENSOR_OK) {
+        return;
+    }
+
+    float batLevel = config->batterySensor->getBatteryLevel();
+    String strBat = String(batLevel);
+    logger << LOG_DEBUG << F("Battery Level: ") << strBat << F("%") << EndLine;
+
+    OsKernel::SetBLECharacteristicValue(BLE_CHT_BATTERY, strBat);
 }
 
 KERNEL_SERVICE(OS_SERVICE_UPDATE_ORIENTATION) {

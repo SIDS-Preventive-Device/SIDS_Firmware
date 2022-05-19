@@ -30,15 +30,23 @@
  */
 KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
     TickType_t lastTicks = xTaskGetTickCount();
-    Matrix<3, 1, int16_t> giroscopeOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(GiroscopeCalibration).toMatrix();
-    Matrix<3, 1, int16_t> accOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(AccelerometerCalibration).toMatrix();
+    Matrix<3, 1, int16_t> giroscopeOffsets;
+    Matrix<3, 1, int16_t> accOffsets;
     Matrix<3, 1, int16_t> dummyOffsets;
     Matrix<3, 3, float> dummyCorrection;
+    OrientationData_t orientationData;
     QuaternionMatrix_t quaternionResults;
+    OrientationParams_t params;
     uint8_t calculatedRisk;
+
     dummyCorrection += 1.0f;
 
-    OrientationParams_t params = {
+    giroscopeOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(GiroscopeCalibration).toMatrix();
+    logger << LOG_MASTER << ~giroscopeOffsets << EndLine;
+    accOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(AccelerometerCalibration).toMatrix();
+    logger << LOG_MASTER << ~accOffsets << EndLine;
+
+    params = {
         .giroscopeOffsets = giroscopeOffsets,
         .giroScale = gscale,
         .accelerometerOffsets = accOffsets,
@@ -48,14 +56,16 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
         .measureInterval = MEASURE_INTERVAL
     };
 
-    logger << LOG_MASTER << ~giroscopeOffsets << EndLine;
-    logger << LOG_MASTER << ~accOffsets << EndLine;
-
     while (true) {
+        //
+        // Update orientation sensor
+        //
+        OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
+        
         //
         // Calculate quaternion values from orientation sensor using the parameters defined.
         //
-        quaternionResults = CalculateOrientation(params);
+        quaternionResults = CalculateOrientation(orientationData, params);
 
         //
         // Determine the risk of the position
@@ -73,6 +83,11 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
             vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(POST_ALERT_WAIT));
             continue;
         }
+
+        //
+        // Update temperature
+        //
+        OsKernel::OsCall(OS_SERVICE_UPDATE_TEMPERATURE, NULL);
 
         vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(MEASURE_INTERVAL));
     }
@@ -110,6 +125,10 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_CALIBRATION) {
             return average;
         }
     };
+
+    //
+    // Calibrate accelerometer configuration
+    //
     AverageOffsetsCalibrationsConfig_t<Vector3D_t> AConfig = {
         .measureIntervalMs = 100,
         .measuringTimeS = 10,

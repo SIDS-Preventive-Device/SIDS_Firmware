@@ -47,9 +47,9 @@ public:
 
 class IBatterySensor : public ISensor {
 protected:
-    uint8_t batteryLevel;
+    float batteryLevel;
 public:
-    uint8_t getBatteryLevel() const { return batteryLevel; }
+    float getBatteryLevel() const { return batteryLevel; }
 };
 
 class ITemperatureSensor : public ISensor {

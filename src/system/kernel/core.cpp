@@ -17,15 +17,24 @@ SystemConfig_t      OsKernel::configuration;
 SystemBootMode_t    OsKernel::bootMode;
 TaskHandle_t        OsKernel::systemMainTask_h;
 esp_timer_handle_t  OsKernel::rfshSensorState_h;
+esp_timer_handle_t  OsKernel::readBatteryTimer_h;
 
-esp_timer_create_args_t refreshSensorState = {
-    .callback = KERNEL_CALLBACK_NAME(UPDATE_SERVICES_CB),
+const esp_timer_create_args_t refreshSensorState = {
+    .callback = KERNEL_CALLBACK_NAME(UPDATE_SERVICES_REFRESH_SENSOR_STATE),
     .arg = NULL,
     .dispatch_method = ESP_TIMER_TASK,
     .name = "RefreshSensorsState"
 };
 
+const esp_timer_create_args_t readBatteryTimer = {
+    .callback = KERNEL_CALLBACK_NAME(UPDATE_SERVICES_BATTERY),
+    .arg = NULL,
+    .dispatch_method = ESP_TIMER_TASK,
+    .name = "ReadBattery"
+};
+
 typedef struct {
+    const char* name;
     ISensor *sensor;
     bool required;
 } SensorsEntryTable_t;
@@ -62,6 +71,12 @@ void OsKernel::OsInit(SystemConfig_t config)
         logger << LOG_ERROR << F("Refresh sensors is disabled!") << EndLine;
     } else {
         esp_timer_start_periodic (rfshSensorState_h, 60000000UL);
+    }
+
+    if (readBatteryTimer_h == NULL) {
+        logger << LOG_ERROR << F("Read battery is disabled!") << EndLine;
+    } else {
+        esp_timer_start_periodic (readBatteryTimer_h, 10000000UL);
     }
 
     logger << LOG_MASTER << F("Initialization done") << EndLine;
@@ -116,9 +131,9 @@ bool OsKernel::OsInitLogger()
 bool OsKernel::OsInitSensors()
 {
     static SensorsEntryTable_t sensorsTable[] = {
-        { configuration.orientationSensor, true },
-        { configuration.temperatureSensor, false },
-        { configuration.batterySensor, false }
+        { "OrientationSensor", configuration.orientationSensor, true },
+        { "TemperatureSensor", configuration.temperatureSensor, false },
+        { "BatterySensor", configuration.batterySensor, false }
     };
     const uint8_t sensorsTableSize = ARRAY_SIZE(sensorsTable);
     uint8_t index = 0;
@@ -135,7 +150,7 @@ bool OsKernel::OsInitSensors()
                 LogKernelError ("Required sensor interface not provided!");
                 return false;
             } else {
-                logger << LOG_WARN << F("Sensor interface not provided: ") << sensorsTable[index].sensor->getName() << EndLine;
+                logger << LOG_WARN << F("Sensor interface not provided: ") << sensorsTable[index].name << EndLine;
                 continue;
             }
         }
@@ -143,6 +158,7 @@ bool OsKernel::OsInitSensors()
         //
         // Error on initization?
         //
+        sensorsTable[index].sensor->setName(sensorsTable[index].name);
         if (sensorsTable[index].sensor->init() == false) {
             //
             // If required throw a kernel error, otherwise only show a warning
@@ -151,7 +167,7 @@ bool OsKernel::OsInitSensors()
                 LogKernelError ("Required sensor interface error on initialization!");
                 return false;
             } else {
-                logger << LOG_WARN << F("Sensor inteface error on init: ") << sensorsTable[index].sensor->getName() << EndLine;
+                logger << LOG_WARN << F("Sensor inteface error on init: ") << sensorsTable[index].name << EndLine;
             }
         }
     }
@@ -162,8 +178,13 @@ bool OsKernel::OsInitSensors()
         configuration.riskAlert->Configure();
     }
 
+    if (configuration.batterySensor && esp_timer_create(&readBatteryTimer, &readBatteryTimer_h) != ESP_OK) {
+        LogKernelError ("Fail to initialize read battery task");
+        return false;
+    }
+
     if (esp_timer_create(&refreshSensorState, &rfshSensorState_h) != ESP_OK) {
-        LogKernelError ("Fail to initialize refresh sensor state");
+        LogKernelError ("Fail to initialize refresh sensor state task");
         return false;
     }
 

@@ -5,12 +5,9 @@
 
 static MahonyFilter mahony;
 
-QuaternionMatrix_t CalculateOrientation(OrientationParams_t params)
+QuaternionMatrix_t CalculateOrientation(OrientationData_t& orientationData, OrientationParams_t params)
 {
-    OrientationData_t orientationData;
     QuaternionMatrix_t result;
-
-    OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
 
     //
     // Calibrate giroscope measure

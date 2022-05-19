@@ -30,6 +30,7 @@ extern SystemBootMode_t bootMode;
 extern TaskHandle_t updateSensorsTask_h;
 extern TaskHandle_t systemMainTask_h;
 extern esp_timer_handle_t rfshSensorState_h;
+extern esp_timer_handle_t readBatteryTimer_h;
 
 extern ISensor* rotationSensor;
 
@@ -46,6 +47,7 @@ extern KERNEL_SERVICE(OS_SERVICE_REBOOT);
 //
 // CALLBACKS
 //
-extern KERNEL_CALLBACK(UPDATE_SERVICES_CB);
+extern KERNEL_CALLBACK(UPDATE_SERVICES_REFRESH_SENSOR_STATE);
+extern KERNEL_CALLBACK(UPDATE_SERVICES_BATTERY);
 
 #endif // __CODE_GRAV_SRC_SYSTEM_KERNEL_INTERNAL_H__

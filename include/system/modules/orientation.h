@@ -42,7 +42,7 @@ typedef struct
 
 typedef Matrix<4, 1, float> QuaternionMatrix_t;
 
-extern QuaternionMatrix_t CalculateOrientation (OrientationParams_t params);
+extern QuaternionMatrix_t CalculateOrientation (OrientationData_t& orientationData, OrientationParams_t params);
 
 extern uint8_t CalculatePositionRisk (QuaternionMatrix_t quaternions);
 
