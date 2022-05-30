@@ -16,7 +16,7 @@ bool BatterySensor::init()
     switch (this->state)
     {
     case SENSOR_OK:
-        logger << LOGGER_TEXT_GREEN << F("Ok") << EndLine;
+        logger << LOGGER_TEXT_GREEN << F("Ok") << " " << this->readPercentage() << "%" << EndLine;
         break;
     case SENSOR_ERROR_ON_CONNECT:
         logger << LOGGER_TEXT_RED << F("Battery read was unsuccesfull") << EndLine;
@@ -49,7 +49,7 @@ SensorState_e BatterySensor::checkState ()
 {
     uint16_t mv = readMilliVolts();
     this->state = SENSOR_OK;
-    if (mv < 2000) {
+    if (mv < 1500) {
         this->state = SENSOR_ERROR_ON_CONNECT;
     }
     return this->state;
@@ -57,14 +57,18 @@ SensorState_e BatterySensor::checkState ()
 
 uint16_t BatterySensor::readMilliVolts ()
 {
-    uint16_t rawMeasure = analogRead (pin);
-    uint16_t mv = ((rawMeasure * 6600) / 4095);
+    uint8_t index = 0;
+    uint32_t sum = 0;
+    for (index = 0; index < BAT_SAMPLES_NUM; index++) {
+        sum += analogRead (pin);
+    }
+    uint16_t mv = (((sum / BAT_SAMPLES_NUM) * 6600) / 4095);
     return mv;
 }
 
 float BatterySensor::readPercentage ()
 {
-    uint16_t mv = this->readMilliVolts();
-    float batPercent = ( 123.0f - ( 123.0f / pow( 1.0f + pow( (float)mv / 3700.0f, 80 ), 0.165 ) ) );
+    float mv = (float)this->readMilliVolts();
+    float batPercent = ( 123.0f - ( 123.0f / pow( 1.0f + pow( mv / 3700.0f, 80 ), 0.165 ) ) );
     return round(batPercent);
 }

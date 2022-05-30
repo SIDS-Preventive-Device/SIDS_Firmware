@@ -12,11 +12,12 @@ KERNEL_CALLBACK(UPDATE_SERVICES_BATTERY) {
         return;
     }
 
-    float batLevel = config->batterySensor->getBatteryLevel();
-    String strBat = String(batLevel);
-    logger << LOG_DEBUG << F("Battery Level: ") << strBat << F("%") << EndLine;
+    config->batterySensor->update();
+    float raw = config->batterySensor->getRawMeasure();
+    uint8_t level = (uint8_t)config->batterySensor->getBatteryLevel();
+    logger << LOG_DEBUG << F("Battery Level: ") << level << F("%, mv: ") << raw << EndLine;
 
-    OsKernel::SetBLECharacteristicValue(BLE_CHT_BATTERY, strBat);
+    OsKernel::SetBLECharacteristicValue(BLE_CHT_BATTERY, level);
 }
 
 KERNEL_SERVICE(OS_SERVICE_UPDATE_ORIENTATION) {

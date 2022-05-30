@@ -50,6 +50,7 @@ protected:
     float batteryLevel;
 public:
     float getBatteryLevel() const { return batteryLevel; }
+    virtual float getRawMeasure() = 0;
 };
 
 class ITemperatureSensor : public ISensor {
