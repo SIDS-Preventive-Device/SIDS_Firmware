@@ -5,7 +5,7 @@
 #include <system/utils/types.h>
 #include "system/kernel/core.h"
 
-#define DEFAULT_BUZZER_PIN 10
+#define DEFAULT_BUZZER_PIN 23
 
 class Buzzer : public IRiskAlert
 {

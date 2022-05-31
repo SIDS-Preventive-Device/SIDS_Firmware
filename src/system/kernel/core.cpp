@@ -113,7 +113,7 @@ bool OsKernel::OsInitBuses()
     }
 
     if (configuration.i2cBus != nullptr) {
-        configuration.i2cBus->begin(-1, -1, 400000L);
+        configuration.i2cBus->begin(-1, -1, 100000L);
     } else {
         LogKernelError ("I2C Bus instance is NULL!!!");
         return false;
@@ -176,6 +176,7 @@ bool OsKernel::OsInitSensors()
         logger << LOG_WARN << F("Risk alert provider is not defined, disabling alerts!") << EndLine;
     } else {
         configuration.riskAlert->Configure();
+        configuration.riskAlert->Alert(1000);
     }
 
     if (configuration.batterySensor && esp_timer_create(&readBatteryTimer, &readBatteryTimer_h) != ESP_OK) {

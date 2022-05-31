@@ -1,8 +1,7 @@
 #include "system/drivers/buzzer.h"
 #include "system/kernel/core.h"
 
-#define __ALERT_TIME_BY_DEFAULT 10000
-
+#define __ALERT_TIME_BY_DEFAULT 5000
 
 Buzzer::Buzzer (uint8_t pin)
     : pin(pin) {
