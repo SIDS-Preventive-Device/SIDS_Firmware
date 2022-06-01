@@ -114,7 +114,7 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_CALIBRATION) {
         },
         .postMeasures = NULL,
         .processResults = [](void *pContext, LinkedList<Vector3D_t>* measures) -> Vector3D_t {
-            Vector3D_t average = measures->reduce<Vector3D_t>([](Vector3D_t *prev, Vector3D_t current) -> void{
+            Vector3D_t average = measures->reduce<Vector3D_t>([](Vector3D_t *prev, Vector3D_t current) -> void {
                 prev->x += current.x;
                 prev->y += current.y;
                 prev->z += current.z;

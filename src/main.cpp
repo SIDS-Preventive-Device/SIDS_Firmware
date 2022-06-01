@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <Wire.h>
+#include <I2Cdev.h>
 
 #include <system/kernel/builder.h>
 #include <system/utils/errors.h>
@@ -13,7 +13,7 @@ void setup() {
   //
   SystemConfig_t config = SystemBuilder()
     .setSerialConfig(Serial, 115200)
-    .setI2Cport(Wire)
+    .setI2Cport(i2c0)
     .setLogLevel(LOG_DEBUG)
     .setBatterySensor<BatterySensor>()
     .setOrientationSensor<SensorMPU9250>()

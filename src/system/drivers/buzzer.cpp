@@ -9,9 +9,9 @@ Buzzer::Buzzer (uint8_t pin)
         .callback = [](void* pPinNumber) -> void {
             digitalWrite(*((uint8_t*)pPinNumber), LOW);
         },
-        .arg = NULL,
+        .arg = &pin,
         .dispatch_method = ESP_TIMER_TASK,
-        .name = "BuzzerShutdown"
+        .name = "AlrtDown"
     };
 
     esp_timer_create (&this->updateSensorTimerConfig, &this->updateSensorsTimer_h);
@@ -20,6 +20,7 @@ Buzzer::Buzzer (uint8_t pin)
 void Buzzer::Configure ()
 {
     pinMode(pin, OUTPUT);
+    digitalWrite (pin, LOW);
 }
 
 void Buzzer::Alert(uint32_t milliseconds) const

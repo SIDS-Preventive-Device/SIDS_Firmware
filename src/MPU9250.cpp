@@ -1,3154 +1,1117 @@
-// I2Cdev library collection - MPU9250 I2C device class
-// Based on InvenSense MPU-9250 register map document rev. 2.0, 5/19/2011 (RM-MPU-6000A-00)
-// 8/24/2011 by Jeff Rowberg <jeff@rowberg.net>
-// Updates should (hopefully) always be available at https://github.com/jrowberg/i2cdevlib
-//
-// Changelog:
-//     ... - ongoing debug release
+/*
+MPU9250.cpp
+BananaPi Bit Team
+juwan@banana-pi.com (Juwan·C)
+wanghao@banana-pi.com (Hulk Wang)
 
-// NOTE: THIS IS ONLY A PARIAL RELEASE. THIS DEVICE CLASS IS CURRENTLY UNDERGOING ACTIVE
-// DEVELOPMENT AND IS STILL MISSING SOME IMPORTANT FEATURES. PLEASE KEEP THIS IN MIND IF
-// YOU DECIDE TO USE THIS PARTICULAR CODE FOR ANYTHING.
+We modified it based on https://github.com/bolderflight/MPU9250
+The main purpose is to adapt the MPU9250 driver library of BPI-BIT (espressif32). 
 
-/* ============================================
-I2Cdev device library code is placed under the MIT license
-Copyright (c) 2012 Jeff Rowberg
+Copyright (c) 2017 BananaPi Bit Team
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software 
+and associated documentation files (the "Software"), to deal in the Software without restriction, 
+including without limitation the rights to use, copy, modify, merge, publish, distribute, 
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is 
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
+The above copyright notice and this permission notice shall be included in all copies or 
+substantial portions of the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-===============================================
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING 
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, 
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+#include "Arduino.h"
 #include "MPU9250.h"
 
-/** Default constructor, uses default I2C address.
- * @see MPU9250_DEFAULT_ADDRESS
- */
-MPU9250::MPU9250() {
-    devAddr = MPU9250_DEFAULT_ADDRESS;
-}
-
-/** Specific address constructor.
- * @param address I2C address
- * @see MPU9250_DEFAULT_ADDRESS
- * @see MPU9250_ADDRESS_AD0_LOW
- * @see MPU9250_ADDRESS_AD0_HIGH
- */
-MPU9250::MPU9250(uint8_t address) {
-    devAddr = address;
-}
-
-/** Power on and prepare for general usage.
- * This will activate the device and take it out of sleep mode (which must be done
- * after start-up). This function also sets both the accelerometer and the gyroscope
- * to their most sensitive settings, namely +/- 2g and +/- 250 degrees/sec, and sets
- * the clock source to use the X Gyro for reference, which is slightly better than
- * the default internal clock source.
- */
-void MPU9250::initialize() {
-    setClockSource(MPU9250_CLOCK_PLL_XGYRO);
-    setFullScaleGyroRange(MPU9250_GYRO_FS_1000);
-    setFullScaleAccelRange(MPU9250_ACCEL_FS_2);
-    setSleepEnabled(false); 
-}
-
-/** Verify the I2C connection.
- * Make sure the device is connected and responds as expected.
- * @return True if connection is valid, false otherwise
- */
-bool MPU9250::testConnection() {
-    return getDeviceID() == 0x71;
-}
-
-// AUX_VDDIO register (InvenSense demo code calls this RA_*G_OFFS_TC)
-
-/** Get the auxiliary I2C supply voltage level.
- * When set to 1, the auxiliary I2C bus high logic level is VDD. When cleared to
- * 0, the auxiliary I2C bus high logic level is VLOGIC. This does not apply to
- * the MPU-6000, which does not have a VLOGIC pin.
- * @return I2C supply voltage level (0=VLOGIC, 1=VDD)
- */
-uint8_t MPU9250::getAuxVDDIOLevel() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_YG_OFFS_TC, MPU9250_TC_PWR_MODE_BIT, buffer);
-    return buffer[0];
-}
-/** Set the auxiliary I2C supply voltage level.
- * When set to 1, the auxiliary I2C bus high logic level is VDD. When cleared to
- * 0, the auxiliary I2C bus high logic level is VLOGIC. This does not apply to
- * the MPU-6000, which does not have a VLOGIC pin.
- * @param level I2C supply voltage level (0=VLOGIC, 1=VDD)
- */
-void MPU9250::setAuxVDDIOLevel(uint8_t level) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_YG_OFFS_TC, MPU9250_TC_PWR_MODE_BIT, level);
-}
-
-// SMPLRT_DIV register
-
-/** Get gyroscope output rate divider.
- * The sensor register output, FIFO output, DMP sampling, Motion detection, Zero
- * Motion detection, and Free Fall detection are all based on the Sample Rate.
- * The Sample Rate is generated by dividing the gyroscope output rate by
- * SMPLRT_DIV:
- *
- * Sample Rate = Gyroscope Output Rate / (1 + SMPLRT_DIV)
- *
- * where Gyroscope Output Rate = 8kHz when the DLPF is disabled (DLPF_CFG = 0 or
- * 7), and 1kHz when the DLPF is enabled (see Register 26).
- *
- * Note: The accelerometer output rate is 1kHz. This means that for a Sample
- * Rate greater than 1kHz, the same accelerometer sample may be output to the
- * FIFO, DMP, and sensor registers more than once.
- *
- * For a diagram of the gyroscope and accelerometer signal paths, see Section 8
- * of the MPU-6000/MPU-9250 Product Specification document.
- *
- * @return Current sample rate
- * @see MPU9250_RA_SMPLRT_DIV
- */
-uint8_t MPU9250::getRate() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_SMPLRT_DIV, buffer);
-    return buffer[0];
-}
-/** Set gyroscope sample rate divider.
- * @param rate New sample rate divider
- * @see getRate()
- * @see MPU9250_RA_SMPLRT_DIV
- */
-void MPU9250::setRate(uint8_t rate) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_SMPLRT_DIV, rate);
-}
-
-// CONFIG register
-
-/** Get external FSYNC configuration.
- * Configures the external Frame Synchronization (FSYNC) pin sampling. An
- * external signal connected to the FSYNC pin can be sampled by configuring
- * EXT_SYNC_SET. Signal changes to the FSYNC pin are latched so that short
- * strobes may be captured. The latched FSYNC signal will be sampled at the
- * Sampling Rate, as defined in register 25. After sampling, the latch will
- * reset to the current FSYNC signal state.
- *
- * The sampled value will be reported in place of the least significant bit in
- * a sensor data register determined by the value of EXT_SYNC_SET according to
- * the following table.
- *
- * <pre>
- * EXT_SYNC_SET | FSYNC Bit Location
- * -------------+-------------------
- * 0            | Input disabled
- * 1            | TEMP_OUT_L[0]
- * 2            | GYRO_XOUT_L[0]
- * 3            | GYRO_YOUT_L[0]
- * 4            | GYRO_ZOUT_L[0]
- * 5            | ACCEL_XOUT_L[0]
- * 6            | ACCEL_YOUT_L[0]
- * 7            | ACCEL_ZOUT_L[0]
- * </pre>
- *
- * @return FSYNC configuration value
- */
-uint8_t MPU9250::getExternalFrameSync() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_CONFIG, MPU9250_CFG_EXT_SYNC_SET_BIT, MPU9250_CFG_EXT_SYNC_SET_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set external FSYNC configuration.
- * @see getExternalFrameSync()
- * @see MPU9250_RA_CONFIG
- * @param sync New FSYNC configuration value
- */
-void MPU9250::setExternalFrameSync(uint8_t sync) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_CONFIG, MPU9250_CFG_EXT_SYNC_SET_BIT, MPU9250_CFG_EXT_SYNC_SET_LENGTH, sync);
-}
-/** Get digital low-pass filter configuration.
- * The DLPF_CFG parameter sets the digital low pass filter configuration. It
- * also determines the internal sampling rate used by the device as shown in
- * the table below.
- *
- * Note: The accelerometer output rate is 1kHz. This means that for a Sample
- * Rate greater than 1kHz, the same accelerometer sample may be output to the
- * FIFO, DMP, and sensor registers more than once.
- *
- * <pre>
- *          |   ACCELEROMETER    |           GYROSCOPE
- * DLPF_CFG | Bandwidth | Delay  | Bandwidth | Delay  | Sample Rate
- * ---------+-----------+--------+-----------+--------+-------------
- * 0        | 260Hz     | 0ms    | 256Hz     | 0.98ms | 8kHz
- * 1        | 184Hz     | 2.0ms  | 188Hz     | 1.9ms  | 1kHz
- * 2        | 94Hz      | 3.0ms  | 98Hz      | 2.8ms  | 1kHz
- * 3        | 44Hz      | 4.9ms  | 42Hz      | 4.8ms  | 1kHz
- * 4        | 21Hz      | 8.5ms  | 20Hz      | 8.3ms  | 1kHz
- * 5        | 10Hz      | 13.8ms | 10Hz      | 13.4ms | 1kHz
- * 6        | 5Hz       | 19.0ms | 5Hz       | 18.6ms | 1kHz
- * 7        |   -- Reserved --   |   -- Reserved --   | Reserved
- * </pre>
- *
- * @return DLFP configuration
- * @see MPU9250_RA_CONFIG
- * @see MPU9250_CFG_DLPF_CFG_BIT
- * @see MPU9250_CFG_DLPF_CFG_LENGTH
- */
-uint8_t MPU9250::getDLPFMode() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_CONFIG, MPU9250_CFG_DLPF_CFG_BIT, MPU9250_CFG_DLPF_CFG_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set digital low-pass filter configuration.
- * @param mode New DLFP configuration setting
- * @see getDLPFBandwidth()
- * @see MPU9250_DLPF_BW_256
- * @see MPU9250_RA_CONFIG
- * @see MPU9250_CFG_DLPF_CFG_BIT
- * @see MPU9250_CFG_DLPF_CFG_LENGTH
- */
-void MPU9250::setDLPFMode(uint8_t mode) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_CONFIG, MPU9250_CFG_DLPF_CFG_BIT, MPU9250_CFG_DLPF_CFG_LENGTH, mode);
-}
-
-// GYRO_CONFIG register
-
-/** Get full-scale gyroscope range.
- * The FS_SEL parameter allows setting the full-scale range of the gyro sensors,
- * as described in the table below.
- *
- * <pre>
- * 0 = +/- 250 degrees/sec
- * 1 = +/- 500 degrees/sec
- * 2 = +/- 1000 degrees/sec
- * 3 = +/- 2000 degrees/sec
- * </pre>
- *
- * @return Current full-scale gyroscope range setting
- * @see MPU9250_GYRO_FS_250
- * @see MPU9250_RA_GYRO_CONFIG
- * @see MPU9250_GCONFIG_FS_SEL_BIT
- * @see MPU9250_GCONFIG_FS_SEL_LENGTH
- */
-uint8_t MPU9250::getFullScaleGyroRange() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_GYRO_CONFIG, MPU9250_GCONFIG_FS_SEL_BIT, MPU9250_GCONFIG_FS_SEL_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set full-scale gyroscope range.
- * @param range New full-scale gyroscope range value
- * @see getFullScaleRange()
- * @see MPU9250_GYRO_FS_250
- * @see MPU9250_RA_GYRO_CONFIG
- * @see MPU9250_GCONFIG_FS_SEL_BIT
- * @see MPU9250_GCONFIG_FS_SEL_LENGTH
- */
-void MPU9250::setFullScaleGyroRange(uint8_t range) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_GYRO_CONFIG, MPU9250_GCONFIG_FS_SEL_BIT, MPU9250_GCONFIG_FS_SEL_LENGTH, range);
-}
-
-// ACCEL_CONFIG register
-
-/** Get self-test enabled setting for accelerometer X axis.
- * @return Self-test enabled value
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-bool MPU9250::getAccelXSelfTest() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_XA_ST_BIT, buffer);
-    return buffer[0];
-}
-/** Get self-test enabled setting for accelerometer X axis.
- * @param enabled Self-test enabled value
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-void MPU9250::setAccelXSelfTest(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_XA_ST_BIT, enabled);
-}
-/** Get self-test enabled value for accelerometer Y axis.
- * @return Self-test enabled value
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-bool MPU9250::getAccelYSelfTest() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_YA_ST_BIT, buffer);
-    return buffer[0];
-}
-/** Get self-test enabled value for accelerometer Y axis.
- * @param enabled Self-test enabled value
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-void MPU9250::setAccelYSelfTest(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_YA_ST_BIT, enabled);
-}
-/** Get self-test enabled value for accelerometer Z axis.
- * @return Self-test enabled value
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-bool MPU9250::getAccelZSelfTest() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_ZA_ST_BIT, buffer);
-    return buffer[0];
-}
-/** Set self-test enabled value for accelerometer Z axis.
- * @param enabled Self-test enabled value
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-void MPU9250::setAccelZSelfTest(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_ZA_ST_BIT, enabled);
-}
-/** Get full-scale accelerometer range.
- * The FS_SEL parameter allows setting the full-scale range of the accelerometer
- * sensors, as described in the table below.
- *
- * <pre>
- * 0 = +/- 2g
- * 1 = +/- 4g
- * 2 = +/- 8g
- * 3 = +/- 16g
- * </pre>
- *
- * @return Current full-scale accelerometer range setting
- * @see MPU9250_ACCEL_FS_2
- * @see MPU9250_RA_ACCEL_CONFIG
- * @see MPU9250_ACONFIG_AFS_SEL_BIT
- * @see MPU9250_ACONFIG_AFS_SEL_LENGTH
- */
-uint8_t MPU9250::getFullScaleAccelRange() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_AFS_SEL_BIT, MPU9250_ACONFIG_AFS_SEL_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set full-scale accelerometer range.
- * @param range New full-scale accelerometer range setting
- * @see getFullScaleAccelRange()
- */
-void MPU9250::setFullScaleAccelRange(uint8_t range) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_AFS_SEL_BIT, MPU9250_ACONFIG_AFS_SEL_LENGTH, range);
-}
-/** Get the high-pass filter configuration.
- * The DHPF is a filter module in the path leading to motion detectors (Free
- * Fall, Motion threshold, and Zero Motion). The high pass filter output is not
- * available to the data registers (see Figure in Section 8 of the MPU-6000/
- * MPU-9250 Product Specification document).
- *
- * The high pass filter has three modes:
- *
- * <pre>
- *    Reset: The filter output settles to zero within one sample. This
- *           effectively disables the high pass filter. This mode may be toggled
- *           to quickly settle the filter.
- *
- *    On:    The high pass filter will pass signals above the cut off frequency.
- *
- *    Hold:  When triggered, the filter holds the present sample. The filter
- *           output will be the difference between the input sample and the held
- *           sample.
- * </pre>
- *
- * <pre>
- * ACCEL_HPF | Filter Mode | Cut-off Frequency
- * ----------+-------------+------------------
- * 0         | Reset       | None
- * 1         | On          | 5Hz
- * 2         | On          | 2.5Hz
- * 3         | On          | 1.25Hz
- * 4         | On          | 0.63Hz
- * 7         | Hold        | None
- * </pre>
- *
- * @return Current high-pass filter configuration
- * @see MPU9250_DHPF_RESET
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-uint8_t MPU9250::getDHPFMode() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_ACCEL_HPF_BIT, MPU9250_ACONFIG_ACCEL_HPF_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set the high-pass filter configuration.
- * @param bandwidth New high-pass filter configuration
- * @see setDHPFMode()
- * @see MPU9250_DHPF_RESET
- * @see MPU9250_RA_ACCEL_CONFIG
- */
-void MPU9250::setDHPFMode(uint8_t bandwidth) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_ACCEL_CONFIG, MPU9250_ACONFIG_ACCEL_HPF_BIT, MPU9250_ACONFIG_ACCEL_HPF_LENGTH, bandwidth);
-}
-
-// FF_THR register
-
-/** Get free-fall event acceleration threshold.
- * This register configures the detection threshold for Free Fall event
- * detection. The unit of FF_THR is 1LSB = 2mg. Free Fall is detected when the
- * absolute value of the accelerometer measurements for the three axes are each
- * less than the detection threshold. This condition increments the Free Fall
- * duration counter (Register 30). The Free Fall interrupt is triggered when the
- * Free Fall duration counter reaches the time specified in FF_DUR.
- *
- * For more details on the Free Fall detection interrupt, see Section 8.2 of the
- * MPU-6000/MPU-9250 Product Specification document as well as Registers 56 and
- * 58 of this document.
- *
- * @return Current free-fall acceleration threshold value (LSB = 2mg)
- * @see MPU9250_RA_FF_THR
- */
-uint8_t MPU9250::getFreefallDetectionThreshold() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_FF_THR, buffer);
-    return buffer[0];
-}
-/** Get free-fall event acceleration threshold.
- * @param threshold New free-fall acceleration threshold value (LSB = 2mg)
- * @see getFreefallDetectionThreshold()
- * @see MPU9250_RA_FF_THR
- */
-void MPU9250::setFreefallDetectionThreshold(uint8_t threshold) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_FF_THR, threshold);
-}
-
-// FF_DUR register
-
-/** Get free-fall event duration threshold.
- * This register configures the duration counter threshold for Free Fall event
- * detection. The duration counter ticks at 1kHz, therefore FF_DUR has a unit
- * of 1 LSB = 1 ms.
- *
- * The Free Fall duration counter increments while the absolute value of the
- * accelerometer measurements are each less than the detection threshold
- * (Register 29). The Free Fall interrupt is triggered when the Free Fall
- * duration counter reaches the time specified in this register.
- *
- * For more details on the Free Fall detection interrupt, see Section 8.2 of
- * the MPU-6000/MPU-9250 Product Specification document as well as Registers 56
- * and 58 of this document.
- *
- * @return Current free-fall duration threshold value (LSB = 1ms)
- * @see MPU9250_RA_FF_DUR
- */
-uint8_t MPU9250::getFreefallDetectionDuration() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_FF_DUR, buffer);
-    return buffer[0];
-}
-/** Get free-fall event duration threshold.
- * @param duration New free-fall duration threshold value (LSB = 1ms)
- * @see getFreefallDetectionDuration()
- * @see MPU9250_RA_FF_DUR
- */
-void MPU9250::setFreefallDetectionDuration(uint8_t duration) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_FF_DUR, duration);
-}
-
-// MOT_THR register
-
-/** Get motion detection event acceleration threshold.
- * This register configures the detection threshold for Motion interrupt
- * generation. The unit of MOT_THR is 1LSB = 2mg. Motion is detected when the
- * absolute value of any of the accelerometer measurements exceeds this Motion
- * detection threshold. This condition increments the Motion detection duration
- * counter (Register 32). The Motion detection interrupt is triggered when the
- * Motion Detection counter reaches the time count specified in MOT_DUR
- * (Register 32).
- *
- * The Motion interrupt will indicate the axis and polarity of detected motion
- * in MOT_DETECT_STATUS (Register 97).
- *
- * For more details on the Motion detection interrupt, see Section 8.3 of the
- * MPU-6000/MPU-9250 Product Specification document as well as Registers 56 and
- * 58 of this document.
- *
- * @return Current motion detection acceleration threshold value (LSB = 2mg)
- * @see MPU9250_RA_MOT_THR
- */
-uint8_t MPU9250::getMotionDetectionThreshold() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_MOT_THR, buffer);
-    return buffer[0];
-}
-/** Set free-fall event acceleration threshold.
- * @param threshold New motion detection acceleration threshold value (LSB = 2mg)
- * @see getMotionDetectionThreshold()
- * @see MPU9250_RA_MOT_THR
- */
-void MPU9250::setMotionDetectionThreshold(uint8_t threshold) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_MOT_THR, threshold);
-}
-
-// MOT_DUR register
-
-/** Get motion detection event duration threshold.
- * This register configures the duration counter threshold for Motion interrupt
- * generation. The duration counter ticks at 1 kHz, therefore MOT_DUR has a unit
- * of 1LSB = 1ms. The Motion detection duration counter increments when the
- * absolute value of any of the accelerometer measurements exceeds the Motion
- * detection threshold (Register 31). The Motion detection interrupt is
- * triggered when the Motion detection counter reaches the time count specified
- * in this register.
- *
- * For more details on the Motion detection interrupt, see Section 8.3 of the
- * MPU-6000/MPU-9250 Product Specification document.
- *
- * @return Current motion detection duration threshold value (LSB = 1ms)
- * @see MPU9250_RA_MOT_DUR
- */
-uint8_t MPU9250::getMotionDetectionDuration() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_MOT_DUR, buffer);
-    return buffer[0];
-}
-/** Set motion detection event duration threshold.
- * @param duration New motion detection duration threshold value (LSB = 1ms)
- * @see getMotionDetectionDuration()
- * @see MPU9250_RA_MOT_DUR
- */
-void MPU9250::setMotionDetectionDuration(uint8_t duration) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_MOT_DUR, duration);
-}
-
-// ZRMOT_THR register
-
-/** Get zero motion detection event acceleration threshold.
- * This register configures the detection threshold for Zero Motion interrupt
- * generation. The unit of ZRMOT_THR is 1LSB = 2mg. Zero Motion is detected when
- * the absolute value of the accelerometer measurements for the 3 axes are each
- * less than the detection threshold. This condition increments the Zero Motion
- * duration counter (Register 34). The Zero Motion interrupt is triggered when
- * the Zero Motion duration counter reaches the time count specified in
- * ZRMOT_DUR (Register 34).
- *
- * Unlike Free Fall or Motion detection, Zero Motion detection triggers an
- * interrupt both when Zero Motion is first detected and when Zero Motion is no
- * longer detected.
- *
- * When a zero motion event is detected, a Zero Motion Status will be indicated
- * in the MOT_DETECT_STATUS register (Register 97). When a motion-to-zero-motion
- * condition is detected, the status bit is set to 1. When a zero-motion-to-
- * motion condition is detected, the status bit is set to 0.
- *
- * For more details on the Zero Motion detection interrupt, see Section 8.4 of
- * the MPU-6000/MPU-9250 Product Specification document as well as Registers 56
- * and 58 of this document.
- *
- * @return Current zero motion detection acceleration threshold value (LSB = 2mg)
- * @see MPU9250_RA_ZRMOT_THR
- */
-uint8_t MPU9250::getZeroMotionDetectionThreshold() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_ZRMOT_THR, buffer);
-    return buffer[0];
-}
-/** Set zero motion detection event acceleration threshold.
- * @param threshold New zero motion detection acceleration threshold value (LSB = 2mg)
- * @see getZeroMotionDetectionThreshold()
- * @see MPU9250_RA_ZRMOT_THR
- */
-void MPU9250::setZeroMotionDetectionThreshold(uint8_t threshold) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_ZRMOT_THR, threshold);
-}
-
-// ZRMOT_DUR register
-
-/** Get zero motion detection event duration threshold.
- * This register configures the duration counter threshold for Zero Motion
- * interrupt generation. The duration counter ticks at 16 Hz, therefore
- * ZRMOT_DUR has a unit of 1 LSB = 64 ms. The Zero Motion duration counter
- * increments while the absolute value of the accelerometer measurements are
- * each less than the detection threshold (Register 33). The Zero Motion
- * interrupt is triggered when the Zero Motion duration counter reaches the time
- * count specified in this register.
- *
- * For more details on the Zero Motion detection interrupt, see Section 8.4 of
- * the MPU-6000/MPU-9250 Product Specification document, as well as Registers 56
- * and 58 of this document.
- *
- * @return Current zero motion detection duration threshold value (LSB = 64ms)
- * @see MPU9250_RA_ZRMOT_DUR
- */
-uint8_t MPU9250::getZeroMotionDetectionDuration() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_ZRMOT_DUR, buffer);
-    return buffer[0];
-}
-/** Set zero motion detection event duration threshold.
- * @param duration New zero motion detection duration threshold value (LSB = 1ms)
- * @see getZeroMotionDetectionDuration()
- * @see MPU9250_RA_ZRMOT_DUR
- */
-void MPU9250::setZeroMotionDetectionDuration(uint8_t duration) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_ZRMOT_DUR, duration);
-}
-
-// FIFO_EN register
-
-/** Get temperature FIFO enabled value.
- * When set to 1, this bit enables TEMP_OUT_H and TEMP_OUT_L (Registers 65 and
- * 66) to be written into the FIFO buffer.
- * @return Current temperature FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getTempFIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_TEMP_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set temperature FIFO enabled value.
- * @param enabled New temperature FIFO enabled value
- * @see getTempFIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setTempFIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_TEMP_FIFO_EN_BIT, enabled);
-}
-/** Get gyroscope X-axis FIFO enabled value.
- * When set to 1, this bit enables GYRO_XOUT_H and GYRO_XOUT_L (Registers 67 and
- * 68) to be written into the FIFO buffer.
- * @return Current gyroscope X-axis FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getXGyroFIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_XG_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set gyroscope X-axis FIFO enabled value.
- * @param enabled New gyroscope X-axis FIFO enabled value
- * @see getXGyroFIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setXGyroFIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_XG_FIFO_EN_BIT, enabled);
-}
-/** Get gyroscope Y-axis FIFO enabled value.
- * When set to 1, this bit enables GYRO_YOUT_H and GYRO_YOUT_L (Registers 69 and
- * 70) to be written into the FIFO buffer.
- * @return Current gyroscope Y-axis FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getYGyroFIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_YG_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set gyroscope Y-axis FIFO enabled value.
- * @param enabled New gyroscope Y-axis FIFO enabled value
- * @see getYGyroFIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setYGyroFIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_YG_FIFO_EN_BIT, enabled);
-}
-/** Get gyroscope Z-axis FIFO enabled value.
- * When set to 1, this bit enables GYRO_ZOUT_H and GYRO_ZOUT_L (Registers 71 and
- * 72) to be written into the FIFO buffer.
- * @return Current gyroscope Z-axis FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getZGyroFIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_ZG_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set gyroscope Z-axis FIFO enabled value.
- * @param enabled New gyroscope Z-axis FIFO enabled value
- * @see getZGyroFIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setZGyroFIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_ZG_FIFO_EN_BIT, enabled);
-}
-/** Get accelerometer FIFO enabled value.
- * When set to 1, this bit enables ACCEL_XOUT_H, ACCEL_XOUT_L, ACCEL_YOUT_H,
- * ACCEL_YOUT_L, ACCEL_ZOUT_H, and ACCEL_ZOUT_L (Registers 59 to 64) to be
- * written into the FIFO buffer.
- * @return Current accelerometer FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getAccelFIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_ACCEL_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set accelerometer FIFO enabled value.
- * @param enabled New accelerometer FIFO enabled value
- * @see getAccelFIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setAccelFIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_ACCEL_FIFO_EN_BIT, enabled);
-}
-/** Get Slave 2 FIFO enabled value.
- * When set to 1, this bit enables EXT_SENS_DATA registers (Registers 73 to 96)
- * associated with Slave 2 to be written into the FIFO buffer.
- * @return Current Slave 2 FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getSlave2FIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_SLV2_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set Slave 2 FIFO enabled value.
- * @param enabled New Slave 2 FIFO enabled value
- * @see getSlave2FIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setSlave2FIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_SLV2_FIFO_EN_BIT, enabled);
-}
-/** Get Slave 1 FIFO enabled value.
- * When set to 1, this bit enables EXT_SENS_DATA registers (Registers 73 to 96)
- * associated with Slave 1 to be written into the FIFO buffer.
- * @return Current Slave 1 FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getSlave1FIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_SLV1_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set Slave 1 FIFO enabled value.
- * @param enabled New Slave 1 FIFO enabled value
- * @see getSlave1FIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setSlave1FIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_SLV1_FIFO_EN_BIT, enabled);
-}
-/** Get Slave 0 FIFO enabled value.
- * When set to 1, this bit enables EXT_SENS_DATA registers (Registers 73 to 96)
- * associated with Slave 0 to be written into the FIFO buffer.
- * @return Current Slave 0 FIFO enabled value
- * @see MPU9250_RA_FIFO_EN
- */
-bool MPU9250::getSlave0FIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_SLV0_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set Slave 0 FIFO enabled value.
- * @param enabled New Slave 0 FIFO enabled value
- * @see getSlave0FIFOEnabled()
- * @see MPU9250_RA_FIFO_EN
- */
-void MPU9250::setSlave0FIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_FIFO_EN, MPU9250_SLV0_FIFO_EN_BIT, enabled);
-}
-
-// I2C_MST_CTRL register
-
-/** Get multi-master enabled value.
- * Multi-master capability allows multiple I2C masters to operate on the same
- * bus. In circuits where multi-master capability is required, set MULT_MST_EN
- * to 1. This will increase current drawn by approximately 30uA.
- *
- * In circuits where multi-master capability is required, the state of the I2C
- * bus must always be monitored by each separate I2C Master. Before an I2C
- * Master can assume arbitration of the bus, it must first confirm that no other
- * I2C Master has arbitration of the bus. When MULT_MST_EN is set to 1, the
- * MPU-60X0's bus arbitration detection logic is turned on, enabling it to
- * detect when the bus is available.
- *
- * @return Current multi-master enabled value
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-bool MPU9250::getMultiMasterEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_MULT_MST_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set multi-master enabled value.
- * @param enabled New multi-master enabled value
- * @see getMultiMasterEnabled()
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-void MPU9250::setMultiMasterEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_MULT_MST_EN_BIT, enabled);
-}
-/** Get wait-for-external-sensor-data enabled value.
- * When the WAIT_FOR_ES bit is set to 1, the Data Ready interrupt will be
- * delayed until External Sensor data from the Slave Devices are loaded into the
- * EXT_SENS_DATA registers. This is used to ensure that both the internal sensor
- * data (i.e. from gyro and accel) and external sensor data have been loaded to
- * their respective data registers (i.e. the data is synced) when the Data Ready
- * interrupt is triggered.
- *
- * @return Current wait-for-external-sensor-data enabled value
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-bool MPU9250::getWaitForExternalSensorEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_WAIT_FOR_ES_BIT, buffer);
-    return buffer[0];
-}
-/** Set wait-for-external-sensor-data enabled value.
- * @param enabled New wait-for-external-sensor-data enabled value
- * @see getWaitForExternalSensorEnabled()
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-void MPU9250::setWaitForExternalSensorEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_WAIT_FOR_ES_BIT, enabled);
-}
-/** Get Slave 3 FIFO enabled value.
- * When set to 1, this bit enables EXT_SENS_DATA registers (Registers 73 to 96)
- * associated with Slave 3 to be written into the FIFO buffer.
- * @return Current Slave 3 FIFO enabled value
- * @see MPU9250_RA_MST_CTRL
- */
-bool MPU9250::getSlave3FIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_SLV_3_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set Slave 3 FIFO enabled value.
- * @param enabled New Slave 3 FIFO enabled value
- * @see getSlave3FIFOEnabled()
- * @see MPU9250_RA_MST_CTRL
- */
-void MPU9250::setSlave3FIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_SLV_3_FIFO_EN_BIT, enabled);
-}
-/** Get slave read/write transition enabled value.
- * The I2C_MST_P_NSR bit configures the I2C Master's transition from one slave
- * read to the next slave read. If the bit equals 0, there will be a restart
- * between reads. If the bit equals 1, there will be a stop followed by a start
- * of the following read. When a write transaction follows a read transaction,
- * the stop followed by a start of the successive write will be always used.
- *
- * @return Current slave read/write transition enabled value
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-bool MPU9250::getSlaveReadWriteTransitionEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_I2C_MST_P_NSR_BIT, buffer);
-    return buffer[0];
-}
-/** Set slave read/write transition enabled value.
- * @param enabled New slave read/write transition enabled value
- * @see getSlaveReadWriteTransitionEnabled()
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-void MPU9250::setSlaveReadWriteTransitionEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_I2C_MST_P_NSR_BIT, enabled);
-}
-/** Get I2C master clock speed.
- * I2C_MST_CLK is a 4 bit unsigned value which configures a divider on the
- * MPU-60X0 internal 8MHz clock. It sets the I2C master clock speed according to
- * the following table:
- *
- * <pre>
- * I2C_MST_CLK | I2C Master Clock Speed | 8MHz Clock Divider
- * ------------+------------------------+-------------------
- * 0           | 348kHz                 | 23
- * 1           | 333kHz                 | 24
- * 2           | 320kHz                 | 25
- * 3           | 308kHz                 | 26
- * 4           | 296kHz                 | 27
- * 5           | 286kHz                 | 28
- * 6           | 276kHz                 | 29
- * 7           | 267kHz                 | 30
- * 8           | 258kHz                 | 31
- * 9           | 500kHz                 | 16
- * 10          | 471kHz                 | 17
- * 11          | 444kHz                 | 18
- * 12          | 421kHz                 | 19
- * 13          | 400kHz                 | 20
- * 14          | 381kHz                 | 21
- * 15          | 364kHz                 | 22
- * </pre>
- *
- * @return Current I2C master clock speed
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-uint8_t MPU9250::getMasterClockSpeed() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_I2C_MST_CLK_BIT, MPU9250_I2C_MST_CLK_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set I2C master clock speed.
- * @reparam speed Current I2C master clock speed
- * @see MPU9250_RA_I2C_MST_CTRL
- */
-void MPU9250::setMasterClockSpeed(uint8_t speed) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_I2C_MST_CTRL, MPU9250_I2C_MST_CLK_BIT, MPU9250_I2C_MST_CLK_LENGTH, speed);
-}
-
-// I2C_SLV* registers (Slave 0-3)
-
-/** Get the I2C address of the specified slave (0-3).
- * Note that Bit 7 (MSB) controls read/write mode. If Bit 7 is set, it's a read
- * operation, and if it is cleared, then it's a write operation. The remaining
- * bits (6-0) are the 7-bit device address of the slave device.
- *
- * In read mode, the result of the read is placed in the lowest available
- * EXT_SENS_DATA register. For further information regarding the allocation of
- * read results, please refer to the EXT_SENS_DATA register description
- * (Registers 73 - 96).
- *
- * The MPU-9250 supports a total of five slaves, but Slave 4 has unique
- * characteristics, and so it has its own functions (getSlave4* and setSlave4*).
- *
- * I2C data transactions are performed at the Sample Rate, as defined in
- * Register 25. The user is responsible for ensuring that I2C data transactions
- * to and from each enabled Slave can be completed within a single period of the
- * Sample Rate.
- *
- * The I2C slave access rate can be reduced relative to the Sample Rate. This
- * reduced access rate is determined by I2C_MST_DLY (Register 52). Whether a
- * slave's access rate is reduced relative to the Sample Rate is determined by
- * I2C_MST_DELAY_CTRL (Register 103).
- *
- * The processing order for the slaves is fixed. The sequence followed for
- * processing the slaves is Slave 0, Slave 1, Slave 2, Slave 3 and Slave 4. If a
- * particular Slave is disabled it will be skipped.
- *
- * Each slave can either be accessed at the sample rate or at a reduced sample
- * rate. In a case where some slaves are accessed at the Sample Rate and some
- * slaves are accessed at the reduced rate, the sequence of accessing the slaves
- * (Slave 0 to Slave 4) is still followed. However, the reduced rate slaves will
- * be skipped if their access rate dictates that they should not be accessed
- * during that particular cycle. For further information regarding the reduced
- * access rate, please refer to Register 52. Whether a slave is accessed at the
- * Sample Rate or at the reduced rate is determined by the Delay Enable bits in
- * Register 103.
- *
- * @param num Slave number (0-3)
- * @return Current address for specified slave
- * @see MPU9250_RA_I2C_SLV0_ADDR
- */
-uint8_t MPU9250::getSlaveAddress(uint8_t num) {
-    if (num > 3) return 0;
-    I2Cdev::readByte(devAddr, MPU9250_RA_I2C_SLV0_ADDR + num*3, buffer);
-    return buffer[0];
-}
-/** Set the I2C address of the specified slave (0-3).
- * @param num Slave number (0-3)
- * @param address New address for specified slave
- * @see getSlaveAddress()
- * @see MPU9250_RA_I2C_SLV0_ADDR
- */
-void MPU9250::setSlaveAddress(uint8_t num, uint8_t address) {
-    if (num > 3) return;
-    I2Cdev::writeByte(devAddr, MPU9250_RA_I2C_SLV0_ADDR + num*3, address);
-}
-/** Get the active internal register for the specified slave (0-3).
- * Read/write operations for this slave will be done to whatever internal
- * register address is stored in this MPU register.
- *
- * The MPU-9250 supports a total of five slaves, but Slave 4 has unique
- * characteristics, and so it has its own functions.
- *
- * @param num Slave number (0-3)
- * @return Current active register for specified slave
- * @see MPU9250_RA_I2C_SLV0_REG
- */
-uint8_t MPU9250::getSlaveRegister(uint8_t num) {
-    if (num > 3) return 0;
-    I2Cdev::readByte(devAddr, MPU9250_RA_I2C_SLV0_REG + num*3, buffer);
-    return buffer[0];
-}
-/** Set the active internal register for the specified slave (0-3).
- * @param num Slave number (0-3)
- * @param reg New active register for specified slave
- * @see getSlaveRegister()
- * @see MPU9250_RA_I2C_SLV0_REG
- */
-void MPU9250::setSlaveRegister(uint8_t num, uint8_t reg) {
-    if (num > 3) return;
-    I2Cdev::writeByte(devAddr, MPU9250_RA_I2C_SLV0_REG + num*3, reg);
-}
-/** Get the enabled value for the specified slave (0-3).
- * When set to 1, this bit enables Slave 0 for data transfer operations. When
- * cleared to 0, this bit disables Slave 0 from data transfer operations.
- * @param num Slave number (0-3)
- * @return Current enabled value for specified slave
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-bool MPU9250::getSlaveEnabled(uint8_t num) {
-    if (num > 3) return 0;
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set the enabled value for the specified slave (0-3).
- * @param num Slave number (0-3)
- * @param enabled New enabled value for specified slave
- * @see getSlaveEnabled()
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-void MPU9250::setSlaveEnabled(uint8_t num, bool enabled) {
-    if (num > 3) return;
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_EN_BIT, enabled);
-}
-/** Get word pair byte-swapping enabled for the specified slave (0-3).
- * When set to 1, this bit enables byte swapping. When byte swapping is enabled,
- * the high and low bytes of a word pair are swapped. Please refer to
- * I2C_SLV0_GRP for the pairing convention of the word pairs. When cleared to 0,
- * bytes transferred to and from Slave 0 will be written to EXT_SENS_DATA
- * registers in the order they were transferred.
- *
- * @param num Slave number (0-3)
- * @return Current word pair byte-swapping enabled value for specified slave
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-bool MPU9250::getSlaveWordByteSwap(uint8_t num) {
-    if (num > 3) return 0;
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_BYTE_SW_BIT, buffer);
-    return buffer[0];
-}
-/** Set word pair byte-swapping enabled for the specified slave (0-3).
- * @param num Slave number (0-3)
- * @param enabled New word pair byte-swapping enabled value for specified slave
- * @see getSlaveWordByteSwap()
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-void MPU9250::setSlaveWordByteSwap(uint8_t num, bool enabled) {
-    if (num > 3) return;
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_BYTE_SW_BIT, enabled);
-}
-/** Get write mode for the specified slave (0-3).
- * When set to 1, the transaction will read or write data only. When cleared to
- * 0, the transaction will write a register address prior to reading or writing
- * data. This should equal 0 when specifying the register address within the
- * Slave device to/from which the ensuing data transaction will take place.
- *
- * @param num Slave number (0-3)
- * @return Current write mode for specified slave (0 = register address + data, 1 = data only)
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-bool MPU9250::getSlaveWriteMode(uint8_t num) {
-    if (num > 3) return 0;
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_REG_DIS_BIT, buffer);
-    return buffer[0];
-}
-/** Set write mode for the specified slave (0-3).
- * @param num Slave number (0-3)
- * @param mode New write mode for specified slave (0 = register address + data, 1 = data only)
- * @see getSlaveWriteMode()
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-void MPU9250::setSlaveWriteMode(uint8_t num, bool mode) {
-    if (num > 3) return;
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_REG_DIS_BIT, mode);
-}
-/** Get word pair grouping order offset for the specified slave (0-3).
- * This sets specifies the grouping order of word pairs received from registers.
- * When cleared to 0, bytes from register addresses 0 and 1, 2 and 3, etc (even,
- * then odd register addresses) are paired to form a word. When set to 1, bytes
- * from register addresses are paired 1 and 2, 3 and 4, etc. (odd, then even
- * register addresses) are paired to form a word.
- *
- * @param num Slave number (0-3)
- * @return Current word pair grouping order offset for specified slave
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-bool MPU9250::getSlaveWordGroupOffset(uint8_t num) {
-    if (num > 3) return 0;
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_GRP_BIT, buffer);
-    return buffer[0];
-}
-/** Set word pair grouping order offset for the specified slave (0-3).
- * @param num Slave number (0-3)
- * @param enabled New word pair grouping order offset for specified slave
- * @see getSlaveWordGroupOffset()
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-void MPU9250::setSlaveWordGroupOffset(uint8_t num, bool enabled) {
-    if (num > 3) return;
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_GRP_BIT, enabled);
-}
-/** Get number of bytes to read for the specified slave (0-3).
- * Specifies the number of bytes transferred to and from Slave 0. Clearing this
- * bit to 0 is equivalent to disabling the register by writing 0 to I2C_SLV0_EN.
- * @param num Slave number (0-3)
- * @return Number of bytes to read for specified slave
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-uint8_t MPU9250::getSlaveDataLength(uint8_t num) {
-    if (num > 3) return 0;
-    I2Cdev::readBits(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_LEN_BIT, MPU9250_I2C_SLV_LEN_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set number of bytes to read for the specified slave (0-3).
- * @param num Slave number (0-3)
- * @param length Number of bytes to read for specified slave
- * @see getSlaveDataLength()
- * @see MPU9250_RA_I2C_SLV0_CTRL
- */
-void MPU9250::setSlaveDataLength(uint8_t num, uint8_t length) {
-    if (num > 3) return;
-    I2Cdev::writeBits(devAddr, MPU9250_RA_I2C_SLV0_CTRL + num*3, MPU9250_I2C_SLV_LEN_BIT, MPU9250_I2C_SLV_LEN_LENGTH, length);
-}
-
-// I2C_SLV* registers (Slave 4)
-
-/** Get the I2C address of Slave 4.
- * Note that Bit 7 (MSB) controls read/write mode. If Bit 7 is set, it's a read
- * operation, and if it is cleared, then it's a write operation. The remaining
- * bits (6-0) are the 7-bit device address of the slave device.
- *
- * @return Current address for Slave 4
- * @see getSlaveAddress()
- * @see MPU9250_RA_I2C_SLV4_ADDR
- */
-uint8_t MPU9250::getSlave4Address() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_I2C_SLV4_ADDR, buffer);
-    return buffer[0];
-}
-/** Set the I2C address of Slave 4.
- * @param address New address for Slave 4
- * @see getSlave4Address()
- * @see MPU9250_RA_I2C_SLV4_ADDR
- */
-void MPU9250::setSlave4Address(uint8_t address) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_I2C_SLV4_ADDR, address);
-}
-/** Get the active internal register for the Slave 4.
- * Read/write operations for this slave will be done to whatever internal
- * register address is stored in this MPU register.
- *
- * @return Current active register for Slave 4
- * @see MPU9250_RA_I2C_SLV4_REG
- */
-uint8_t MPU9250::getSlave4Register() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_I2C_SLV4_REG, buffer);
-    return buffer[0];
-}
-/** Set the active internal register for Slave 4.
- * @param reg New active register for Slave 4
- * @see getSlave4Register()
- * @see MPU9250_RA_I2C_SLV4_REG
- */
-void MPU9250::setSlave4Register(uint8_t reg) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_I2C_SLV4_REG, reg);
-}
-/** Set new byte to write to Slave 4.
- * This register stores the data to be written into the Slave 4. If I2C_SLV4_RW
- * is set 1 (set to read), this register has no effect.
- * @param data New byte to write to Slave 4
- * @see MPU9250_RA_I2C_SLV4_DO
- */
-void MPU9250::setSlave4OutputByte(uint8_t data) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_I2C_SLV4_DO, data);
-}
-/** Get the enabled value for the Slave 4.
- * When set to 1, this bit enables Slave 4 for data transfer operations. When
- * cleared to 0, this bit disables Slave 4 from data transfer operations.
- * @return Current enabled value for Slave 4
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-bool MPU9250::getSlave4Enabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set the enabled value for Slave 4.
- * @param enabled New enabled value for Slave 4
- * @see getSlave4Enabled()
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-void MPU9250::setSlave4Enabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_EN_BIT, enabled);
-}
-/** Get the enabled value for Slave 4 transaction interrupts.
- * When set to 1, this bit enables the generation of an interrupt signal upon
- * completion of a Slave 4 transaction. When cleared to 0, this bit disables the
- * generation of an interrupt signal upon completion of a Slave 4 transaction.
- * The interrupt status can be observed in Register 54.
- *
- * @return Current enabled value for Slave 4 transaction interrupts.
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-bool MPU9250::getSlave4InterruptEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_INT_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set the enabled value for Slave 4 transaction interrupts.
- * @param enabled New enabled value for Slave 4 transaction interrupts.
- * @see getSlave4InterruptEnabled()
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-void MPU9250::setSlave4InterruptEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_INT_EN_BIT, enabled);
-}
-/** Get write mode for Slave 4.
- * When set to 1, the transaction will read or write data only. When cleared to
- * 0, the transaction will write a register address prior to reading or writing
- * data. This should equal 0 when specifying the register address within the
- * Slave device to/from which the ensuing data transaction will take place.
- *
- * @return Current write mode for Slave 4 (0 = register address + data, 1 = data only)
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-bool MPU9250::getSlave4WriteMode() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_REG_DIS_BIT, buffer);
-    return buffer[0];
-}
-/** Set write mode for the Slave 4.
- * @param mode New write mode for Slave 4 (0 = register address + data, 1 = data only)
- * @see getSlave4WriteMode()
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-void MPU9250::setSlave4WriteMode(bool mode) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_REG_DIS_BIT, mode);
-}
-/** Get Slave 4 master delay value.
- * This configures the reduced access rate of I2C slaves relative to the Sample
- * Rate. When a slave's access rate is decreased relative to the Sample Rate,
- * the slave is accessed every:
- *
- *     1 / (1 + I2C_MST_DLY) samples
- *
- * This base Sample Rate in turn is determined by SMPLRT_DIV (register 25) and
- * DLPF_CFG (register 26). Whether a slave's access rate is reduced relative to
- * the Sample Rate is determined by I2C_MST_DELAY_CTRL (register 103). For
- * further information regarding the Sample Rate, please refer to register 25.
- *
- * @return Current Slave 4 master delay value
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-uint8_t MPU9250::getSlave4MasterDelay() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_MST_DLY_BIT, MPU9250_I2C_SLV4_MST_DLY_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set Slave 4 master delay value.
- * @param delay New Slave 4 master delay value
- * @see getSlave4MasterDelay()
- * @see MPU9250_RA_I2C_SLV4_CTRL
- */
-void MPU9250::setSlave4MasterDelay(uint8_t delay) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_I2C_SLV4_CTRL, MPU9250_I2C_SLV4_MST_DLY_BIT, MPU9250_I2C_SLV4_MST_DLY_LENGTH, delay);
-}
-/** Get last available byte read from Slave 4.
- * This register stores the data read from Slave 4. This field is populated
- * after a read transaction.
- * @return Last available byte read from to Slave 4
- * @see MPU9250_RA_I2C_SLV4_DI
- */
-uint8_t MPU9250::getSlate4InputByte() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_I2C_SLV4_DI, buffer);
-    return buffer[0];
-}
-
-// I2C_MST_STATUS register
-
-/** Get FSYNC interrupt status.
- * This bit reflects the status of the FSYNC interrupt from an external device
- * into the MPU-60X0. This is used as a way to pass an external interrupt
- * through the MPU-60X0 to the host application processor. When set to 1, this
- * bit will cause an interrupt if FSYNC_INT_EN is asserted in INT_PIN_CFG
- * (Register 55).
- * @return FSYNC interrupt status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getPassthroughStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_PASS_THROUGH_BIT, buffer);
-    return buffer[0];
-}
-/** Get Slave 4 transaction done status.
- * Automatically sets to 1 when a Slave 4 transaction has completed. This
- * triggers an interrupt if the I2C_MST_INT_EN bit in the INT_ENABLE register
- * (Register 56) is asserted and if the SLV_4_DONE_INT bit is asserted in the
- * I2C_SLV4_CTRL register (Register 52).
- * @return Slave 4 transaction done status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getSlave4IsDone() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_I2C_SLV4_DONE_BIT, buffer);
-    return buffer[0];
-}
-/** Get master arbitration lost status.
- * This bit automatically sets to 1 when the I2C Master has lost arbitration of
- * the auxiliary I2C bus (an error condition). This triggers an interrupt if the
- * I2C_MST_INT_EN bit in the INT_ENABLE register (Register 56) is asserted.
- * @return Master arbitration lost status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getLostArbitration() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_I2C_LOST_ARB_BIT, buffer);
-    return buffer[0];
-}
-/** Get Slave 4 NACK status.
- * This bit automatically sets to 1 when the I2C Master receives a NACK in a
- * transaction with Slave 4. This triggers an interrupt if the I2C_MST_INT_EN
- * bit in the INT_ENABLE register (Register 56) is asserted.
- * @return Slave 4 NACK interrupt status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getSlave4Nack() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_I2C_SLV4_NACK_BIT, buffer);
-    return buffer[0];
-}
-/** Get Slave 3 NACK status.
- * This bit automatically sets to 1 when the I2C Master receives a NACK in a
- * transaction with Slave 3. This triggers an interrupt if the I2C_MST_INT_EN
- * bit in the INT_ENABLE register (Register 56) is asserted.
- * @return Slave 3 NACK interrupt status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getSlave3Nack() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_I2C_SLV3_NACK_BIT, buffer);
-    return buffer[0];
-}
-/** Get Slave 2 NACK status.
- * This bit automatically sets to 1 when the I2C Master receives a NACK in a
- * transaction with Slave 2. This triggers an interrupt if the I2C_MST_INT_EN
- * bit in the INT_ENABLE register (Register 56) is asserted.
- * @return Slave 2 NACK interrupt status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getSlave2Nack() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_I2C_SLV2_NACK_BIT, buffer);
-    return buffer[0];
-}
-/** Get Slave 1 NACK status.
- * This bit automatically sets to 1 when the I2C Master receives a NACK in a
- * transaction with Slave 1. This triggers an interrupt if the I2C_MST_INT_EN
- * bit in the INT_ENABLE register (Register 56) is asserted.
- * @return Slave 1 NACK interrupt status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getSlave1Nack() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_I2C_SLV1_NACK_BIT, buffer);
-    return buffer[0];
-}
-/** Get Slave 0 NACK status.
- * This bit automatically sets to 1 when the I2C Master receives a NACK in a
- * transaction with Slave 0. This triggers an interrupt if the I2C_MST_INT_EN
- * bit in the INT_ENABLE register (Register 56) is asserted.
- * @return Slave 0 NACK interrupt status
- * @see MPU9250_RA_I2C_MST_STATUS
- */
-bool MPU9250::getSlave0Nack() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_STATUS, MPU9250_MST_I2C_SLV0_NACK_BIT, buffer);
-    return buffer[0];
-}
-
-// INT_PIN_CFG register
-
-/** Get interrupt logic level mode.
- * Will be set 0 for active-high, 1 for active-low.
- * @return Current interrupt mode (0=active-high, 1=active-low)
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_INT_LEVEL_BIT
- */
-bool MPU9250::getInterruptMode() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_INT_LEVEL_BIT, buffer);
-    return buffer[0];
-}
-/** Set interrupt logic level mode.
- * @param mode New interrupt mode (0=active-high, 1=active-low)
- * @see getInterruptMode()
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_INT_LEVEL_BIT
- */
-void MPU9250::setInterruptMode(bool mode) {
-   I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_INT_LEVEL_BIT, mode);
-}
-/** Get interrupt drive mode.
- * Will be set 0 for push-pull, 1 for open-drain.
- * @return Current interrupt drive mode (0=push-pull, 1=open-drain)
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_INT_OPEN_BIT
- */
-bool MPU9250::getInterruptDrive() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_INT_OPEN_BIT, buffer);
-    return buffer[0];
-}
-/** Set interrupt drive mode.
- * @param drive New interrupt drive mode (0=push-pull, 1=open-drain)
- * @see getInterruptDrive()
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_INT_OPEN_BIT
- */
-void MPU9250::setInterruptDrive(bool drive) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_INT_OPEN_BIT, drive);
-}
-/** Get interrupt latch mode.
- * Will be set 0 for 50us-pulse, 1 for latch-until-int-cleared.
- * @return Current latch mode (0=50us-pulse, 1=latch-until-int-cleared)
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_LATCH_INT_EN_BIT
- */
-bool MPU9250::getInterruptLatch() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_LATCH_INT_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set interrupt latch mode.
- * @param latch New latch mode (0=50us-pulse, 1=latch-until-int-cleared)
- * @see getInterruptLatch()
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_LATCH_INT_EN_BIT
- */
-void MPU9250::setInterruptLatch(bool latch) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_LATCH_INT_EN_BIT, latch);
-}
-/** Get interrupt latch clear mode.
- * Will be set 0 for status-read-only, 1 for any-register-read.
- * @return Current latch clear mode (0=status-read-only, 1=any-register-read)
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_INT_RD_CLEAR_BIT
- */
-bool MPU9250::getInterruptLatchClear() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_INT_RD_CLEAR_BIT, buffer);
-    return buffer[0];
-}
-/** Set interrupt latch clear mode.
- * @param clear New latch clear mode (0=status-read-only, 1=any-register-read)
- * @see getInterruptLatchClear()
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_INT_RD_CLEAR_BIT
- */
-void MPU9250::setInterruptLatchClear(bool clear) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_INT_RD_CLEAR_BIT, clear);
-}
-/** Get FSYNC interrupt logic level mode.
- * @return Current FSYNC interrupt mode (0=active-high, 1=active-low)
- * @see getFSyncInterruptMode()
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_FSYNC_INT_LEVEL_BIT
- */
-bool MPU9250::getFSyncInterruptLevel() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_FSYNC_INT_LEVEL_BIT, buffer);
-    return buffer[0];
-}
-/** Set FSYNC interrupt logic level mode.
- * @param mode New FSYNC interrupt mode (0=active-high, 1=active-low)
- * @see getFSyncInterruptMode()
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_FSYNC_INT_LEVEL_BIT
- */
-void MPU9250::setFSyncInterruptLevel(bool level) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_FSYNC_INT_LEVEL_BIT, level);
-}
-/** Get FSYNC pin interrupt enabled setting.
- * Will be set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled setting
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_FSYNC_INT_EN_BIT
- */
-bool MPU9250::getFSyncInterruptEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_FSYNC_INT_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set FSYNC pin interrupt enabled setting.
- * @param enabled New FSYNC pin interrupt enabled setting
- * @see getFSyncInterruptEnabled()
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_FSYNC_INT_EN_BIT
- */
-void MPU9250::setFSyncInterruptEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_FSYNC_INT_EN_BIT, enabled);
-}
-/** Get I2C bypass enabled status.
- * When this bit is equal to 1 and I2C_MST_EN (Register 106 bit[5]) is equal to
- * 0, the host application processor will be able to directly access the
- * auxiliary I2C bus of the MPU-60X0. When this bit is equal to 0, the host
- * application processor will not be able to directly access the auxiliary I2C
- * bus of the MPU-60X0 regardless of the state of I2C_MST_EN (Register 106
- * bit[5]).
- * @return Current I2C bypass enabled status
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_I2C_BYPASS_EN_BIT
- */
-bool MPU9250::getI2CBypassEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_I2C_BYPASS_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set I2C bypass enabled status.
- * When this bit is equal to 1 and I2C_MST_EN (Register 106 bit[5]) is equal to
- * 0, the host application processor will be able to directly access the
- * auxiliary I2C bus of the MPU-60X0. When this bit is equal to 0, the host
- * application processor will not be able to directly access the auxiliary I2C
- * bus of the MPU-60X0 regardless of the state of I2C_MST_EN (Register 106
- * bit[5]).
- * @param enabled New I2C bypass enabled status
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_I2C_BYPASS_EN_BIT
- */
-void MPU9250::setI2CBypassEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_I2C_BYPASS_EN_BIT, enabled);
-}
-/** Get reference clock output enabled status.
- * When this bit is equal to 1, a reference clock output is provided at the
- * CLKOUT pin. When this bit is equal to 0, the clock output is disabled. For
- * further information regarding CLKOUT, please refer to the MPU-60X0 Product
- * Specification document.
- * @return Current reference clock output enabled status
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_CLKOUT_EN_BIT
- */
-bool MPU9250::getClockOutputEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_CLKOUT_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set reference clock output enabled status.
- * When this bit is equal to 1, a reference clock output is provided at the
- * CLKOUT pin. When this bit is equal to 0, the clock output is disabled. For
- * further information regarding CLKOUT, please refer to the MPU-60X0 Product
- * Specification document.
- * @param enabled New reference clock output enabled status
- * @see MPU9250_RA_INT_PIN_CFG
- * @see MPU9250_INTCFG_CLKOUT_EN_BIT
- */
-void MPU9250::setClockOutputEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_PIN_CFG, MPU9250_INTCFG_CLKOUT_EN_BIT, enabled);
-}
-
-// INT_ENABLE register
-
-/** Get full interrupt enabled status.
- * Full register byte for all interrupts, for quick reading. Each bit will be
- * set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled status
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_FF_BIT
- **/
-uint8_t MPU9250::getIntEnabled() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_INT_ENABLE, buffer);
-    return buffer[0];
-}
-/** Set full interrupt enabled status.
- * Full register byte for all interrupts, for quick reading. Each bit should be
- * set 0 for disabled, 1 for enabled.
- * @param enabled New interrupt enabled status
- * @see getIntFreefallEnabled()
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_FF_BIT
- **/
-void MPU9250::setIntEnabled(uint8_t enabled) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_INT_ENABLE, enabled);
-}
-/** Get Free Fall interrupt enabled status.
- * Will be set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled status
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_FF_BIT
- **/
-bool MPU9250::getIntFreefallEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_FF_BIT, buffer);
-    return buffer[0];
-}
-/** Set Free Fall interrupt enabled status.
- * @param enabled New interrupt enabled status
- * @see getIntFreefallEnabled()
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_FF_BIT
- **/
-void MPU9250::setIntFreefallEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_FF_BIT, enabled);
-}
-/** Get Motion Detection interrupt enabled status.
- * Will be set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled status
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_MOT_BIT
- **/
-bool MPU9250::getIntMotionEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_MOT_BIT, buffer);
-    return buffer[0];
-}
-/** Set Motion Detection interrupt enabled status.
- * @param enabled New interrupt enabled status
- * @see getIntMotionEnabled()
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_MOT_BIT
- **/
-void MPU9250::setIntMotionEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_MOT_BIT, enabled);
-}
-/** Get Zero Motion Detection interrupt enabled status.
- * Will be set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled status
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_ZMOT_BIT
- **/
-bool MPU9250::getIntZeroMotionEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_ZMOT_BIT, buffer);
-    return buffer[0];
-}
-/** Set Zero Motion Detection interrupt enabled status.
- * @param enabled New interrupt enabled status
- * @see getIntZeroMotionEnabled()
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_ZMOT_BIT
- **/
-void MPU9250::setIntZeroMotionEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_ZMOT_BIT, enabled);
-}
-/** Get FIFO Buffer Overflow interrupt enabled status.
- * Will be set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled status
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_FIFO_OFLOW_BIT
- **/
-bool MPU9250::getIntFIFOBufferOverflowEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_FIFO_OFLOW_BIT, buffer);
-    return buffer[0];
-}
-/** Set FIFO Buffer Overflow interrupt enabled status.
- * @param enabled New interrupt enabled status
- * @see getIntFIFOBufferOverflowEnabled()
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_FIFO_OFLOW_BIT
- **/
-void MPU9250::setIntFIFOBufferOverflowEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_FIFO_OFLOW_BIT, enabled);
-}
-/** Get I2C Master interrupt enabled status.
- * This enables any of the I2C Master interrupt sources to generate an
- * interrupt. Will be set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled status
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_I2C_MST_INT_BIT
- **/
-bool MPU9250::getIntI2CMasterEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_I2C_MST_INT_BIT, buffer);
-    return buffer[0];
-}
-/** Set I2C Master interrupt enabled status.
- * @param enabled New interrupt enabled status
- * @see getIntI2CMasterEnabled()
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_I2C_MST_INT_BIT
- **/
-void MPU9250::setIntI2CMasterEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_I2C_MST_INT_BIT, enabled);
-}
-/** Get Data Ready interrupt enabled setting.
- * This event occurs each time a write operation to all of the sensor registers
- * has been completed. Will be set 0 for disabled, 1 for enabled.
- * @return Current interrupt enabled status
- * @see MPU9250_RA_INT_ENABLE
- * @see MPU9250_INTERRUPT_DATA_RDY_BIT
- */
-bool MPU9250::getIntDataReadyEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_DATA_RDY_BIT, buffer);
-    return buffer[0];
-}
-/** Set Data Ready interrupt enabled status.
- * @param enabled New interrupt enabled status
- * @see getIntDataReadyEnabled()
- * @see MPU9250_RA_INT_CFG
- * @see MPU9250_INTERRUPT_DATA_RDY_BIT
- */
-void MPU9250::setIntDataReadyEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_DATA_RDY_BIT, enabled);
-}
-
-// INT_STATUS register
-
-/** Get full set of interrupt status bits.
- * These bits clear to 0 after the register has been read. Very useful
- * for getting multiple INT statuses, since each single bit read clears
- * all of them because it has to read the whole byte.
- * @return Current interrupt status
- * @see MPU9250_RA_INT_STATUS
- */
-uint8_t MPU9250::getIntStatus() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_INT_STATUS, buffer);
-    return buffer[0];
-}
-/** Get Free Fall interrupt status.
- * This bit automatically sets to 1 when a Free Fall interrupt has been
- * generated. The bit clears to 0 after the register has been read.
- * @return Current interrupt status
- * @see MPU9250_RA_INT_STATUS
- * @see MPU9250_INTERRUPT_FF_BIT
- */
-bool MPU9250::getIntFreefallStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_FF_BIT, buffer);
-    return buffer[0];
-}
-/** Get Motion Detection interrupt status.
- * This bit automatically sets to 1 when a Motion Detection interrupt has been
- * generated. The bit clears to 0 after the register has been read.
- * @return Current interrupt status
- * @see MPU9250_RA_INT_STATUS
- * @see MPU9250_INTERRUPT_MOT_BIT
- */
-bool MPU9250::getIntMotionStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_MOT_BIT, buffer);
-    return buffer[0];
-}
-/** Get Zero Motion Detection interrupt status.
- * This bit automatically sets to 1 when a Zero Motion Detection interrupt has
- * been generated. The bit clears to 0 after the register has been read.
- * @return Current interrupt status
- * @see MPU9250_RA_INT_STATUS
- * @see MPU9250_INTERRUPT_ZMOT_BIT
- */
-bool MPU9250::getIntZeroMotionStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_ZMOT_BIT, buffer);
-    return buffer[0];
-}
-/** Get FIFO Buffer Overflow interrupt status.
- * This bit automatically sets to 1 when a Free Fall interrupt has been
- * generated. The bit clears to 0 after the register has been read.
- * @return Current interrupt status
- * @see MPU9250_RA_INT_STATUS
- * @see MPU9250_INTERRUPT_FIFO_OFLOW_BIT
- */
-bool MPU9250::getIntFIFOBufferOverflowStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_FIFO_OFLOW_BIT, buffer);
-    return buffer[0];
-}
-/** Get I2C Master interrupt status.
- * This bit automatically sets to 1 when an I2C Master interrupt has been
- * generated. For a list of I2C Master interrupts, please refer to Register 54.
- * The bit clears to 0 after the register has been read.
- * @return Current interrupt status
- * @see MPU9250_RA_INT_STATUS
- * @see MPU9250_INTERRUPT_I2C_MST_INT_BIT
- */
-bool MPU9250::getIntI2CMasterStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_I2C_MST_INT_BIT, buffer);
-    return buffer[0];
-}
-/** Get Data Ready interrupt status.
- * This bit automatically sets to 1 when a Data Ready interrupt has been
- * generated. The bit clears to 0 after the register has been read.
- * @return Current interrupt status
- * @see MPU9250_RA_INT_STATUS
- * @see MPU9250_INTERRUPT_DATA_RDY_BIT
- */
-bool MPU9250::getIntDataReadyStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_DATA_RDY_BIT, buffer);
-    return buffer[0];
-}
-
-// ACCEL_*OUT_* registers
-
-/** Get raw 9-axis motion sensor readings (accel/gyro/compass).
- * FUNCTION NOT FULLY IMPLEMENTED YET.
- * @param ax 16-bit signed integer container for accelerometer X-axis value
- * @param ay 16-bit signed integer container for accelerometer Y-axis value
- * @param az 16-bit signed integer container for accelerometer Z-axis value
- * @param gx 16-bit signed integer container for gyroscope X-axis value
- * @param gy 16-bit signed integer container for gyroscope Y-axis value
- * @param gz 16-bit signed integer container for gyroscope Z-axis value
- * @param mx 16-bit signed integer container for magnetometer X-axis value
- * @param my 16-bit signed integer container for magnetometer Y-axis value
- * @param mz 16-bit signed integer container for magnetometer Z-axis value
- * @see getMotion6()
- * @see getAcceleration()
- * @see getRotation()
- * @see MPU9250_RA_ACCEL_XOUT_H
- */
-void MPU9250::getMotion9(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz, int16_t* mx, int16_t* my, int16_t* mz) {
-
-	//get accel and gyro
-	getMotion6(ax, ay, az, gx, gy, gz);
-
-	//read mag
-	I2Cdev::writeByte(devAddr, MPU9250_RA_INT_PIN_CFG, 0x02); //set i2c bypass enable pin to true to access magnetometer
-	delay(5);
-	I2Cdev::writeByte(MPU9150_RA_MAG_ADDRESS, 0x0A, 0x01); //enable the magnetometer
-	delay(5);
-	I2Cdev::readBytes(MPU9150_RA_MAG_ADDRESS, MPU9150_RA_MAG_XOUT_L, 6, buffer);
-	*mx = (((int16_t)buffer[1]) << 8) | buffer[0];
-    *my = (((int16_t)buffer[3]) << 8) | buffer[2];
-    *mz = (((int16_t)buffer[5]) << 8) | buffer[4];
-}
-/** Get raw 6-axis motion sensor readings (accel/gyro).
- * Retrieves all currently available motion sensor values.
- * @param ax 16-bit signed integer container for accelerometer X-axis value
- * @param ay 16-bit signed integer container for accelerometer Y-axis value
- * @param az 16-bit signed integer container for accelerometer Z-axis value
- * @param gx 16-bit signed integer container for gyroscope X-axis value
- * @param gy 16-bit signed integer container for gyroscope Y-axis value
- * @param gz 16-bit signed integer container for gyroscope Z-axis value
- * @see getAcceleration()
- * @see getRotation()
- * @see MPU9250_RA_ACCEL_XOUT_H
- */
-void MPU9250::getMotion6(int16_t* ax, int16_t* ay, int16_t* az, int16_t* gx, int16_t* gy, int16_t* gz) {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_ACCEL_XOUT_H, 14, buffer);
-    *ax = (((int16_t)buffer[0]) << 8) | buffer[1];
-    *ay = (((int16_t)buffer[2]) << 8) | buffer[3];
-    *az = (((int16_t)buffer[4]) << 8) | buffer[5];
-    *gx = (((int16_t)buffer[8]) << 8) | buffer[9];
-    *gy = (((int16_t)buffer[10]) << 8) | buffer[11];
-    *gz = (((int16_t)buffer[12]) << 8) | buffer[13];
-}
-/** Get 3-axis accelerometer readings.
- * These registers store the most recent accelerometer measurements.
- * Accelerometer measurements are written to these registers at the Sample Rate
- * as defined in Register 25.
- *
- * The accelerometer measurement registers, along with the temperature
- * measurement registers, gyroscope measurement registers, and external sensor
- * data registers, are composed of two sets of registers: an internal register
- * set and a user-facing read register set.
- *
- * The data within the accelerometer sensors' internal register set is always
- * updated at the Sample Rate. Meanwhile, the user-facing read register set
- * duplicates the internal register set's data values whenever the serial
- * interface is idle. This guarantees that a burst read of sensor registers will
- * read measurements from the same sampling instant. Note that if burst reads
- * are not used, the user is responsible for ensuring a set of single byte reads
- * correspond to a single sampling instant by checking the Data Ready interrupt.
- *
- * Each 16-bit accelerometer measurement has a full scale defined in ACCEL_FS
- * (Register 28). For each full scale setting, the accelerometers' sensitivity
- * per LSB in ACCEL_xOUT is shown in the table below:
- *
- * <pre>
- * AFS_SEL | Full Scale Range | LSB Sensitivity
- * --------+------------------+----------------
- * 0       | +/- 2g           | 8192 LSB/mg
- * 1       | +/- 4g           | 4096 LSB/mg
- * 2       | +/- 8g           | 2048 LSB/mg
- * 3       | +/- 16g          | 1024 LSB/mg
- * </pre>
- *
- * @param x 16-bit signed integer container for X-axis acceleration
- * @param y 16-bit signed integer container for Y-axis acceleration
- * @param z 16-bit signed integer container for Z-axis acceleration
- * @see MPU9250_RA_GYRO_XOUT_H
- */
-void MPU9250::getAcceleration(int16_t* x, int16_t* y, int16_t* z) {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_ACCEL_XOUT_H, 6, buffer);
-    *x = (((int16_t)buffer[0]) << 8) | buffer[1];
-    *y = (((int16_t)buffer[2]) << 8) | buffer[3];
-    *z = (((int16_t)buffer[4]) << 8) | buffer[5];
-}
-/** Get X-axis accelerometer reading.
- * @return X-axis acceleration measurement in 16-bit 2's complement format
- * @see getMotion6()
- * @see MPU9250_RA_ACCEL_XOUT_H
- */
-int16_t MPU9250::getAccelerationX() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_ACCEL_XOUT_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-/** Get Y-axis accelerometer reading.
- * @return Y-axis acceleration measurement in 16-bit 2's complement format
- * @see getMotion6()
- * @see MPU9250_RA_ACCEL_YOUT_H
- */
-int16_t MPU9250::getAccelerationY() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_ACCEL_YOUT_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-/** Get Z-axis accelerometer reading.
- * @return Z-axis acceleration measurement in 16-bit 2's complement format
- * @see getMotion6()
- * @see MPU9250_RA_ACCEL_ZOUT_H
- */
-int16_t MPU9250::getAccelerationZ() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_ACCEL_ZOUT_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-
-// TEMP_OUT_* registers
-
-/** Get current internal temperature.
- * @return Temperature reading in 16-bit 2's complement format
- * @see MPU9250_RA_TEMP_OUT_H
- */
-int16_t MPU9250::getTemperature() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_TEMP_OUT_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-
-// GYRO_*OUT_* registers
-
-/** Get 3-axis gyroscope readings.
- * These gyroscope measurement registers, along with the accelerometer
- * measurement registers, temperature measurement registers, and external sensor
- * data registers, are composed of two sets of registers: an internal register
- * set and a user-facing read register set.
- * The data within the gyroscope sensors' internal register set is always
- * updated at the Sample Rate. Meanwhile, the user-facing read register set
- * duplicates the internal register set's data values whenever the serial
- * interface is idle. This guarantees that a burst read of sensor registers will
- * read measurements from the same sampling instant. Note that if burst reads
- * are not used, the user is responsible for ensuring a set of single byte reads
- * correspond to a single sampling instant by checking the Data Ready interrupt.
- *
- * Each 16-bit gyroscope measurement has a full scale defined in FS_SEL
- * (Register 27). For each full scale setting, the gyroscopes' sensitivity per
- * LSB in GYRO_xOUT is shown in the table below:
- *
- * <pre>
- * FS_SEL | Full Scale Range   | LSB Sensitivity
- * -------+--------------------+----------------
- * 0      | +/- 250 degrees/s  | 131 LSB/deg/s
- * 1      | +/- 500 degrees/s  | 65.5 LSB/deg/s
- * 2      | +/- 1000 degrees/s | 32.8 LSB/deg/s
- * 3      | +/- 2000 degrees/s | 16.4 LSB/deg/s
- * </pre>
- *
- * @param x 16-bit signed integer container for X-axis rotation
- * @param y 16-bit signed integer container for Y-axis rotation
- * @param z 16-bit signed integer container for Z-axis rotation
- * @see getMotion6()
- * @see MPU9250_RA_GYRO_XOUT_H
- */
-void MPU9250::getRotation(int16_t* x, int16_t* y, int16_t* z) {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_GYRO_XOUT_H, 6, buffer);
-    *x = (((int16_t)buffer[0]) << 8) | buffer[1];
-    *y = (((int16_t)buffer[2]) << 8) | buffer[3];
-    *z = (((int16_t)buffer[4]) << 8) | buffer[5];
-}
-/** Get X-axis gyroscope reading.
- * @return X-axis rotation measurement in 16-bit 2's complement format
- * @see getMotion6()
- * @see MPU9250_RA_GYRO_XOUT_H
- */
-int16_t MPU9250::getRotationX() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_GYRO_XOUT_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-/** Get Y-axis gyroscope reading.
- * @return Y-axis rotation measurement in 16-bit 2's complement format
- * @see getMotion6()
- * @see MPU9250_RA_GYRO_YOUT_H
- */
-int16_t MPU9250::getRotationY() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_GYRO_YOUT_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-/** Get Z-axis gyroscope reading.
- * @return Z-axis rotation measurement in 16-bit 2's complement format
- * @see getMotion6()
- * @see MPU9250_RA_GYRO_ZOUT_H
- */
-int16_t MPU9250::getRotationZ() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_GYRO_ZOUT_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-
-// EXT_SENS_DATA_* registers
-
-/** Read single byte from external sensor data register.
- * These registers store data read from external sensors by the Slave 0, 1, 2,
- * and 3 on the auxiliary I2C interface. Data read by Slave 4 is stored in
- * I2C_SLV4_DI (Register 53).
- *
- * External sensor data is written to these registers at the Sample Rate as
- * defined in Register 25. This access rate can be reduced by using the Slave
- * Delay Enable registers (Register 103).
- *
- * External sensor data registers, along with the gyroscope measurement
- * registers, accelerometer measurement registers, and temperature measurement
- * registers, are composed of two sets of registers: an internal register set
- * and a user-facing read register set.
- *
- * The data within the external sensors' internal register set is always updated
- * at the Sample Rate (or the reduced access rate) whenever the serial interface
- * is idle. This guarantees that a burst read of sensor registers will read
- * measurements from the same sampling instant. Note that if burst reads are not
- * used, the user is responsible for ensuring a set of single byte reads
- * correspond to a single sampling instant by checking the Data Ready interrupt.
- *
- * Data is placed in these external sensor data registers according to
- * I2C_SLV0_CTRL, I2C_SLV1_CTRL, I2C_SLV2_CTRL, and I2C_SLV3_CTRL (Registers 39,
- * 42, 45, and 48). When more than zero bytes are read (I2C_SLVx_LEN > 0) from
- * an enabled slave (I2C_SLVx_EN = 1), the slave is read at the Sample Rate (as
- * defined in Register 25) or delayed rate (if specified in Register 52 and
- * 103). During each Sample cycle, slave reads are performed in order of Slave
- * number. If all slaves are enabled with more than zero bytes to be read, the
- * order will be Slave 0, followed by Slave 1, Slave 2, and Slave 3.
- *
- * Each enabled slave will have EXT_SENS_DATA registers associated with it by
- * number of bytes read (I2C_SLVx_LEN) in order of slave number, starting from
- * EXT_SENS_DATA_00. Note that this means enabling or disabling a slave may
- * change the higher numbered slaves' associated registers. Furthermore, if
- * fewer total bytes are being read from the external sensors as a result of
- * such a change, then the data remaining in the registers which no longer have
- * an associated slave device (i.e. high numbered registers) will remain in
- * these previously allocated registers unless reset.
- *
- * If the sum of the read lengths of all SLVx transactions exceed the number of
- * available EXT_SENS_DATA registers, the excess bytes will be dropped. There
- * are 24 EXT_SENS_DATA registers and hence the total read lengths between all
- * the slaves cannot be greater than 24 or some bytes will be lost.
- *
- * Note: Slave 4's behavior is distinct from that of Slaves 0-3. For further
- * information regarding the characteristics of Slave 4, please refer to
- * Registers 49 to 53.
- *
- * EXAMPLE:
- * Suppose that Slave 0 is enabled with 4 bytes to be read (I2C_SLV0_EN = 1 and
- * I2C_SLV0_LEN = 4) while Slave 1 is enabled with 2 bytes to be read so that
- * I2C_SLV1_EN = 1 and I2C_SLV1_LEN = 2. In such a situation, EXT_SENS_DATA _00
- * through _03 will be associated with Slave 0, while EXT_SENS_DATA _04 and 05
- * will be associated with Slave 1. If Slave 2 is enabled as well, registers
- * starting from EXT_SENS_DATA_06 will be allocated to Slave 2.
- *
- * If Slave 2 is disabled while Slave 3 is enabled in this same situation, then
- * registers starting from EXT_SENS_DATA_06 will be allocated to Slave 3
- * instead.
- *
- * REGISTER ALLOCATION FOR DYNAMIC DISABLE VS. NORMAL DISABLE:
- * If a slave is disabled at any time, the space initially allocated to the
- * slave in the EXT_SENS_DATA register, will remain associated with that slave.
- * This is to avoid dynamic adjustment of the register allocation.
- *
- * The allocation of the EXT_SENS_DATA registers is recomputed only when (1) all
- * slaves are disabled, or (2) the I2C_MST_RST bit is set (Register 106).
- *
- * This above is also true if one of the slaves gets NACKed and stops
- * functioning.
- *
- * @param position Starting position (0-23)
- * @return Byte read from register
- */
-uint8_t MPU9250::getExternalSensorByte(int position) {
-    I2Cdev::readByte(devAddr, MPU9250_RA_EXT_SENS_DATA_00 + position, buffer);
-    return buffer[0];
-}
-/** Read word (2 bytes) from external sensor data registers.
- * @param position Starting position (0-21)
- * @return Word read from register
- * @see getExternalSensorByte()
- */
-uint16_t MPU9250::getExternalSensorWord(int position) {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_EXT_SENS_DATA_00 + position, 2, buffer);
-    return (((uint16_t)buffer[0]) << 8) | buffer[1];
-}
-/** Read double word (4 bytes) from external sensor data registers.
- * @param position Starting position (0-20)
- * @return Double word read from registers
- * @see getExternalSensorByte()
- */
-uint32_t MPU9250::getExternalSensorDWord(int position) {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_EXT_SENS_DATA_00 + position, 4, buffer);
-    return (((uint32_t)buffer[0]) << 24) | (((uint32_t)buffer[1]) << 16) | (((uint16_t)buffer[2]) << 8) | buffer[3];
-}
-
-// MOT_DETECT_STATUS register
-
-/** Get X-axis negative motion detection interrupt status.
- * @return Motion detection status
- * @see MPU9250_RA_MOT_DETECT_STATUS
- * @see MPU9250_MOTION_MOT_XNEG_BIT
- */
-bool MPU9250::getXNegMotionDetected() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_MOT_DETECT_STATUS, MPU9250_MOTION_MOT_XNEG_BIT, buffer);
-    return buffer[0];
-}
-/** Get X-axis positive motion detection interrupt status.
- * @return Motion detection status
- * @see MPU9250_RA_MOT_DETECT_STATUS
- * @see MPU9250_MOTION_MOT_XPOS_BIT
- */
-bool MPU9250::getXPosMotionDetected() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_MOT_DETECT_STATUS, MPU9250_MOTION_MOT_XPOS_BIT, buffer);
-    return buffer[0];
-}
-/** Get Y-axis negative motion detection interrupt status.
- * @return Motion detection status
- * @see MPU9250_RA_MOT_DETECT_STATUS
- * @see MPU9250_MOTION_MOT_YNEG_BIT
- */
-bool MPU9250::getYNegMotionDetected() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_MOT_DETECT_STATUS, MPU9250_MOTION_MOT_YNEG_BIT, buffer);
-    return buffer[0];
-}
-/** Get Y-axis positive motion detection interrupt status.
- * @return Motion detection status
- * @see MPU9250_RA_MOT_DETECT_STATUS
- * @see MPU9250_MOTION_MOT_YPOS_BIT
- */
-bool MPU9250::getYPosMotionDetected() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_MOT_DETECT_STATUS, MPU9250_MOTION_MOT_YPOS_BIT, buffer);
-    return buffer[0];
-}
-/** Get Z-axis negative motion detection interrupt status.
- * @return Motion detection status
- * @see MPU9250_RA_MOT_DETECT_STATUS
- * @see MPU9250_MOTION_MOT_ZNEG_BIT
- */
-bool MPU9250::getZNegMotionDetected() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_MOT_DETECT_STATUS, MPU9250_MOTION_MOT_ZNEG_BIT, buffer);
-    return buffer[0];
-}
-/** Get Z-axis positive motion detection interrupt status.
- * @return Motion detection status
- * @see MPU9250_RA_MOT_DETECT_STATUS
- * @see MPU9250_MOTION_MOT_ZPOS_BIT
- */
-bool MPU9250::getZPosMotionDetected() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_MOT_DETECT_STATUS, MPU9250_MOTION_MOT_ZPOS_BIT, buffer);
-    return buffer[0];
-}
-/** Get zero motion detection interrupt status.
- * @return Motion detection status
- * @see MPU9250_RA_MOT_DETECT_STATUS
- * @see MPU9250_MOTION_MOT_ZRMOT_BIT
- */
-bool MPU9250::getZeroMotionDetected() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_MOT_DETECT_STATUS, MPU9250_MOTION_MOT_ZRMOT_BIT, buffer);
-    return buffer[0];
-}
-
-// I2C_SLV*_DO register
-
-/** Write byte to Data Output container for specified slave.
- * This register holds the output data written into Slave when Slave is set to
- * write mode. For further information regarding Slave control, please
- * refer to Registers 37 to 39 and immediately following.
- * @param num Slave number (0-3)
- * @param data Byte to write
- * @see MPU9250_RA_I2C_SLV0_DO
- */
-void MPU9250::setSlaveOutputByte(uint8_t num, uint8_t data) {
-    if (num > 3) return;
-    I2Cdev::writeByte(devAddr, MPU9250_RA_I2C_SLV0_DO + num, data);
-}
-
-// I2C_MST_DELAY_CTRL register
-
-/** Get external data shadow delay enabled status.
- * This register is used to specify the timing of external sensor data
- * shadowing. When DELAY_ES_SHADOW is set to 1, shadowing of external
- * sensor data is delayed until all data has been received.
- * @return Current external data shadow delay enabled status.
- * @see MPU9250_RA_I2C_MST_DELAY_CTRL
- * @see MPU9250_DELAYCTRL_DELAY_ES_SHADOW_BIT
- */
-bool MPU9250::getExternalShadowDelayEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_DELAY_CTRL, MPU9250_DELAYCTRL_DELAY_ES_SHADOW_BIT, buffer);
-    return buffer[0];
-}
-/** Set external data shadow delay enabled status.
- * @param enabled New external data shadow delay enabled status.
- * @see getExternalShadowDelayEnabled()
- * @see MPU9250_RA_I2C_MST_DELAY_CTRL
- * @see MPU9250_DELAYCTRL_DELAY_ES_SHADOW_BIT
- */
-void MPU9250::setExternalShadowDelayEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_MST_DELAY_CTRL, MPU9250_DELAYCTRL_DELAY_ES_SHADOW_BIT, enabled);
-}
-/** Get slave delay enabled status.
- * When a particular slave delay is enabled, the rate of access for the that
- * slave device is reduced. When a slave's access rate is decreased relative to
- * the Sample Rate, the slave is accessed every:
- *
- *     1 / (1 + I2C_MST_DLY) Samples
- *
- * This base Sample Rate in turn is determined by SMPLRT_DIV (register  * 25)
- * and DLPF_CFG (register 26).
- *
- * For further information regarding I2C_MST_DLY, please refer to register 52.
- * For further information regarding the Sample Rate, please refer to register 25.
- *
- * @param num Slave number (0-4)
- * @return Current slave delay enabled status.
- * @see MPU9250_RA_I2C_MST_DELAY_CTRL
- * @see MPU9250_DELAYCTRL_I2C_SLV0_DLY_EN_BIT
- */
-bool MPU9250::getSlaveDelayEnabled(uint8_t num) {
-    // MPU9250_DELAYCTRL_I2C_SLV4_DLY_EN_BIT is 4, SLV3 is 3, etc.
-    if (num > 4) return 0;
-    I2Cdev::readBit(devAddr, MPU9250_RA_I2C_MST_DELAY_CTRL, num, buffer);
-    return buffer[0];
-}
-/** Set slave delay enabled status.
- * @param num Slave number (0-4)
- * @param enabled New slave delay enabled status.
- * @see MPU9250_RA_I2C_MST_DELAY_CTRL
- * @see MPU9250_DELAYCTRL_I2C_SLV0_DLY_EN_BIT
- */
-void MPU9250::setSlaveDelayEnabled(uint8_t num, bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_I2C_MST_DELAY_CTRL, num, enabled);
-}
-
-// SIGNAL_PATH_RESET register
-
-/** Reset gyroscope signal path.
- * The reset will revert the signal path analog to digital converters and
- * filters to their power up configurations.
- * @see MPU9250_RA_SIGNAL_PATH_RESET
- * @see MPU9250_PATHRESET_GYRO_RESET_BIT
- */
-void MPU9250::resetGyroscopePath() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_SIGNAL_PATH_RESET, MPU9250_PATHRESET_GYRO_RESET_BIT, true);
-}
-/** Reset accelerometer signal path.
- * The reset will revert the signal path analog to digital converters and
- * filters to their power up configurations.
- * @see MPU9250_RA_SIGNAL_PATH_RESET
- * @see MPU9250_PATHRESET_ACCEL_RESET_BIT
- */
-void MPU9250::resetAccelerometerPath() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_SIGNAL_PATH_RESET, MPU9250_PATHRESET_ACCEL_RESET_BIT, true);
-}
-/** Reset temperature sensor signal path.
- * The reset will revert the signal path analog to digital converters and
- * filters to their power up configurations.
- * @see MPU9250_RA_SIGNAL_PATH_RESET
- * @see MPU9250_PATHRESET_TEMP_RESET_BIT
- */
-void MPU9250::resetTemperaturePath() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_SIGNAL_PATH_RESET, MPU9250_PATHRESET_TEMP_RESET_BIT, true);
-}
-
-// MOT_DETECT_CTRL register
-
-/** Get accelerometer power-on delay.
- * The accelerometer data path provides samples to the sensor registers, Motion
- * detection, Zero Motion detection, and Free Fall detection modules. The
- * signal path contains filters which must be flushed on wake-up with new
- * samples before the detection modules begin operations. The default wake-up
- * delay, of 4ms can be lengthened by up to 3ms. This additional delay is
- * specified in ACCEL_ON_DELAY in units of 1 LSB = 1 ms. The user may select
- * any value above zero unless instructed otherwise by InvenSense. Please refer
- * to Section 8 of the MPU-6000/MPU-9250 Product Specification document for
- * further information regarding the detection modules.
- * @return Current accelerometer power-on delay
- * @see MPU9250_RA_MOT_DETECT_CTRL
- * @see MPU9250_DETECT_ACCEL_ON_DELAY_BIT
- */
-uint8_t MPU9250::getAccelerometerPowerOnDelay() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_MOT_DETECT_CTRL, MPU9250_DETECT_ACCEL_ON_DELAY_BIT, MPU9250_DETECT_ACCEL_ON_DELAY_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set accelerometer power-on delay.
- * @param delay New accelerometer power-on delay (0-3)
- * @see getAccelerometerPowerOnDelay()
- * @see MPU9250_RA_MOT_DETECT_CTRL
- * @see MPU9250_DETECT_ACCEL_ON_DELAY_BIT
- */
-void MPU9250::setAccelerometerPowerOnDelay(uint8_t delay) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_MOT_DETECT_CTRL, MPU9250_DETECT_ACCEL_ON_DELAY_BIT, MPU9250_DETECT_ACCEL_ON_DELAY_LENGTH, delay);
-}
-/** Get Free Fall detection counter decrement configuration.
- * Detection is registered by the Free Fall detection module after accelerometer
- * measurements meet their respective threshold conditions over a specified
- * number of samples. When the threshold conditions are met, the corresponding
- * detection counter increments by 1. The user may control the rate at which the
- * detection counter decrements when the threshold condition is not met by
- * configuring FF_COUNT. The decrement rate can be set according to the
- * following table:
- *
- * <pre>
- * FF_COUNT | Counter Decrement
- * ---------+------------------
- * 0        | Reset
- * 1        | 1
- * 2        | 2
- * 3        | 4
- * </pre>
- *
- * When FF_COUNT is configured to 0 (reset), any non-qualifying sample will
- * reset the counter to 0. For further information on Free Fall detection,
- * please refer to Registers 29 to 32.
- *
- * @return Current decrement configuration
- * @see MPU9250_RA_MOT_DETECT_CTRL
- * @see MPU9250_DETECT_FF_COUNT_BIT
- */
-uint8_t MPU9250::getFreefallDetectionCounterDecrement() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_MOT_DETECT_CTRL, MPU9250_DETECT_FF_COUNT_BIT, MPU9250_DETECT_FF_COUNT_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set Free Fall detection counter decrement configuration.
- * @param decrement New decrement configuration value
- * @see getFreefallDetectionCounterDecrement()
- * @see MPU9250_RA_MOT_DETECT_CTRL
- * @see MPU9250_DETECT_FF_COUNT_BIT
- */
-void MPU9250::setFreefallDetectionCounterDecrement(uint8_t decrement) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_MOT_DETECT_CTRL, MPU9250_DETECT_FF_COUNT_BIT, MPU9250_DETECT_FF_COUNT_LENGTH, decrement);
-}
-/** Get Motion detection counter decrement configuration.
- * Detection is registered by the Motion detection module after accelerometer
- * measurements meet their respective threshold conditions over a specified
- * number of samples. When the threshold conditions are met, the corresponding
- * detection counter increments by 1. The user may control the rate at which the
- * detection counter decrements when the threshold condition is not met by
- * configuring MOT_COUNT. The decrement rate can be set according to the
- * following table:
- *
- * <pre>
- * MOT_COUNT | Counter Decrement
- * ----------+------------------
- * 0         | Reset
- * 1         | 1
- * 2         | 2
- * 3         | 4
- * </pre>
- *
- * When MOT_COUNT is configured to 0 (reset), any non-qualifying sample will
- * reset the counter to 0. For further information on Motion detection,
- * please refer to Registers 29 to 32.
- *
- */
-uint8_t MPU9250::getMotionDetectionCounterDecrement() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_MOT_DETECT_CTRL, MPU9250_DETECT_MOT_COUNT_BIT, MPU9250_DETECT_MOT_COUNT_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set Motion detection counter decrement configuration.
- * @param decrement New decrement configuration value
- * @see getMotionDetectionCounterDecrement()
- * @see MPU9250_RA_MOT_DETECT_CTRL
- * @see MPU9250_DETECT_MOT_COUNT_BIT
- */
-void MPU9250::setMotionDetectionCounterDecrement(uint8_t decrement) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_MOT_DETECT_CTRL, MPU9250_DETECT_MOT_COUNT_BIT, MPU9250_DETECT_MOT_COUNT_LENGTH, decrement);
-}
-
-// USER_CTRL register
-
-/** Get FIFO enabled status.
- * When this bit is set to 0, the FIFO buffer is disabled. The FIFO buffer
- * cannot be written to or read from while disabled. The FIFO buffer's state
- * does not change unless the MPU-60X0 is power cycled.
- * @return Current FIFO enabled status
- * @see MPU9250_RA_USER_CTRL
- * @see MPU9250_USERCTRL_FIFO_EN_BIT
- */
-bool MPU9250::getFIFOEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_FIFO_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set FIFO enabled status.
- * @param enabled New FIFO enabled status
- * @see getFIFOEnabled()
- * @see MPU9250_RA_USER_CTRL
- * @see MPU9250_USERCTRL_FIFO_EN_BIT
- */
-void MPU9250::setFIFOEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_FIFO_EN_BIT, enabled);
-}
-/** Get I2C Master Mode enabled status.
- * When this mode is enabled, the MPU-60X0 acts as the I2C Master to the
- * external sensor slave devices on the auxiliary I2C bus. When this bit is
- * cleared to 0, the auxiliary I2C bus lines (AUX_DA and AUX_CL) are logically
- * driven by the primary I2C bus (SDA and SCL). This is a precondition to
- * enabling Bypass Mode. For further information regarding Bypass Mode, please
- * refer to Register 55.
- * @return Current I2C Master Mode enabled status
- * @see MPU9250_RA_USER_CTRL
- * @see MPU9250_USERCTRL_I2C_MST_EN_BIT
- */
-bool MPU9250::getI2CMasterModeEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_I2C_MST_EN_BIT, buffer);
-    return buffer[0];
-}
-/** Set I2C Master Mode enabled status.
- * @param enabled New I2C Master Mode enabled status
- * @see getI2CMasterModeEnabled()
- * @see MPU9250_RA_USER_CTRL
- * @see MPU9250_USERCTRL_I2C_MST_EN_BIT
- */
-void MPU9250::setI2CMasterModeEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_I2C_MST_EN_BIT, enabled);
-}
-/** Switch from I2C to SPI mode (MPU-6000 only)
- * If this is set, the primary SPI interface will be enabled in place of the
- * disabled primary I2C interface.
- */
-void MPU9250::switchSPIEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_I2C_IF_DIS_BIT, enabled);
-}
-/** Reset the FIFO.
- * This bit resets the FIFO buffer when set to 1 while FIFO_EN equals 0. This
- * bit automatically clears to 0 after the reset has been triggered.
- * @see MPU9250_RA_USER_CTRL
- * @see MPU9250_USERCTRL_FIFO_RESET_BIT
- */
-void MPU9250::resetFIFO() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_FIFO_RESET_BIT, true);
-}
-/** Reset the I2C Master.
- * This bit resets the I2C Master when set to 1 while I2C_MST_EN equals 0.
- * This bit automatically clears to 0 after the reset has been triggered.
- * @see MPU9250_RA_USER_CTRL
- * @see MPU9250_USERCTRL_I2C_MST_RESET_BIT
- */
-void MPU9250::resetI2CMaster() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_I2C_MST_RESET_BIT, true);
-}
-/** Reset all sensor registers and signal paths.
- * When set to 1, this bit resets the signal paths for all sensors (gyroscopes,
- * accelerometers, and temperature sensor). This operation will also clear the
- * sensor registers. This bit automatically clears to 0 after the reset has been
- * triggered.
- *
- * When resetting only the signal path (and not the sensor registers), please
- * use Register 104, SIGNAL_PATH_RESET.
- *
- * @see MPU9250_RA_USER_CTRL
- * @see MPU9250_USERCTRL_SIG_COND_RESET_BIT
- */
-void MPU9250::resetSensors() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_SIG_COND_RESET_BIT, true);
-}
-
-// PWR_MGMT_1 register
-
-/** Trigger a full device reset.
- * A small delay of ~50ms may be desirable after triggering a reset.
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_DEVICE_RESET_BIT
- */
-void MPU9250::reset() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_DEVICE_RESET_BIT, true);
-}
-/** Get sleep mode status.
- * Setting the SLEEP bit in the register puts the device into very low power
- * sleep mode. In this mode, only the serial interface and internal registers
- * remain active, allowing for a very low standby current. Clearing this bit
- * puts the device back into normal mode. To save power, the individual standby
- * selections for each of the gyros should be used if any gyro axis is not used
- * by the application.
- * @return Current sleep mode enabled status
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_SLEEP_BIT
- */
-bool MPU9250::getSleepEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_SLEEP_BIT, buffer);
-    return buffer[0];
-}
-/** Set sleep mode status.
- * @param enabled New sleep mode enabled status
- * @see getSleepEnabled()
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_SLEEP_BIT
- */
-void MPU9250::setSleepEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_SLEEP_BIT, enabled);
-}
-/** Get wake cycle enabled status.
- * When this bit is set to 1 and SLEEP is disabled, the MPU-60X0 will cycle
- * between sleep mode and waking up to take a single sample of data from active
- * sensors at a rate determined by LP_WAKE_CTRL (register 108).
- * @return Current sleep mode enabled status
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_CYCLE_BIT
- */
-bool MPU9250::getWakeCycleEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_CYCLE_BIT, buffer);
-    return buffer[0];
-}
-/** Set wake cycle enabled status.
- * @param enabled New sleep mode enabled status
- * @see getWakeCycleEnabled()
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_CYCLE_BIT
- */
-void MPU9250::setWakeCycleEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_CYCLE_BIT, enabled);
-}
-/** Get temperature sensor enabled status.
- * Control the usage of the internal temperature sensor.
- *
- * Note: this register stores the *disabled* value, but for consistency with the
- * rest of the code, the function is named and used with standard true/false
- * values to indicate whether the sensor is enabled or disabled, respectively.
- *
- * @return Current temperature sensor enabled status
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_TEMP_DIS_BIT
- */
-bool MPU9250::getTempSensorEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_TEMP_DIS_BIT, buffer);
-    return buffer[0] == 0; // 1 is actually disabled here
-}
-/** Set temperature sensor enabled status.
- * Note: this register stores the *disabled* value, but for consistency with the
- * rest of the code, the function is named and used with standard true/false
- * values to indicate whether the sensor is enabled or disabled, respectively.
- *
- * @param enabled New temperature sensor enabled status
- * @see getTempSensorEnabled()
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_TEMP_DIS_BIT
- */
-void MPU9250::setTempSensorEnabled(bool enabled) {
-    // 1 is actually disabled here
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_TEMP_DIS_BIT, !enabled);
-}
-/** Get clock source setting.
- * @return Current clock source setting
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_CLKSEL_BIT
- * @see MPU9250_PWR1_CLKSEL_LENGTH
- */
-uint8_t MPU9250::getClockSource() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_CLKSEL_BIT, MPU9250_PWR1_CLKSEL_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set clock source setting.
- * An internal 8MHz oscillator, gyroscope based clock, or external sources can
- * be selected as the MPU-60X0 clock source. When the internal 8 MHz oscillator
- * or an external source is chosen as the clock source, the MPU-60X0 can operate
- * in low power modes with the gyroscopes disabled.
- *
- * Upon power up, the MPU-60X0 clock source defaults to the internal oscillator.
- * However, it is highly recommended that the device be configured to use one of
- * the gyroscopes (or an external clock source) as the clock reference for
- * improved stability. The clock source can be selected according to the following table:
- *
- * <pre>
- * CLK_SEL | Clock Source
- * --------+--------------------------------------
- * 0       | Internal oscillator
- * 1       | PLL with X Gyro reference
- * 2       | PLL with Y Gyro reference
- * 3       | PLL with Z Gyro reference
- * 4       | PLL with external 32.768kHz reference
- * 5       | PLL with external 19.2MHz reference
- * 6       | Reserved
- * 7       | Stops the clock and keeps the timing generator in reset
- * </pre>
- *
- * @param source New clock source setting
- * @see getClockSource()
- * @see MPU9250_RA_PWR_MGMT_1
- * @see MPU9250_PWR1_CLKSEL_BIT
- * @see MPU9250_PWR1_CLKSEL_LENGTH
- */
-void MPU9250::setClockSource(uint8_t source) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_PWR_MGMT_1, MPU9250_PWR1_CLKSEL_BIT, MPU9250_PWR1_CLKSEL_LENGTH, source);
-}
-
-// PWR_MGMT_2 register
-
-/** Get wake frequency in Accel-Only Low Power Mode.
- * The MPU-60X0 can be put into Accerlerometer Only Low Power Mode by setting
- * PWRSEL to 1 in the Power Management 1 register (Register 107). In this mode,
- * the device will power off all devices except for the primary I2C interface,
- * waking only the accelerometer at fixed intervals to take a single
- * measurement. The frequency of wake-ups can be configured with LP_WAKE_CTRL
- * as shown below:
- *
- * <pre>
- * LP_WAKE_CTRL | Wake-up Frequency
- * -------------+------------------
- * 0            | 1.25 Hz
- * 1            | 2.5 Hz
- * 2            | 5 Hz
- * 3            | 10 Hz
- * <pre>
- *
- * For further information regarding the MPU-60X0's power modes, please refer to
- * Register 107.
- *
- * @return Current wake frequency
- * @see MPU9250_RA_PWR_MGMT_2
- */
-uint8_t MPU9250::getWakeFrequency() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_LP_WAKE_CTRL_BIT, MPU9250_PWR2_LP_WAKE_CTRL_LENGTH, buffer);
-    return buffer[0];
-}
-/** Set wake frequency in Accel-Only Low Power Mode.
- * @param frequency New wake frequency
- * @see MPU9250_RA_PWR_MGMT_2
- */
-void MPU9250::setWakeFrequency(uint8_t frequency) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_LP_WAKE_CTRL_BIT, MPU9250_PWR2_LP_WAKE_CTRL_LENGTH, frequency);
-}
-
-/** Get X-axis accelerometer standby enabled status.
- * If enabled, the X-axis will not gather or report data (or use power).
- * @return Current X-axis standby enabled status
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_XA_BIT
- */
-bool MPU9250::getStandbyXAccelEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_XA_BIT, buffer);
-    return buffer[0];
-}
-/** Set X-axis accelerometer standby enabled status.
- * @param New X-axis standby enabled status
- * @see getStandbyXAccelEnabled()
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_XA_BIT
- */
-void MPU9250::setStandbyXAccelEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_XA_BIT, enabled);
-}
-/** Get Y-axis accelerometer standby enabled status.
- * If enabled, the Y-axis will not gather or report data (or use power).
- * @return Current Y-axis standby enabled status
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_YA_BIT
- */
-bool MPU9250::getStandbyYAccelEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_YA_BIT, buffer);
-    return buffer[0];
-}
-/** Set Y-axis accelerometer standby enabled status.
- * @param New Y-axis standby enabled status
- * @see getStandbyYAccelEnabled()
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_YA_BIT
- */
-void MPU9250::setStandbyYAccelEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_YA_BIT, enabled);
-}
-/** Get Z-axis accelerometer standby enabled status.
- * If enabled, the Z-axis will not gather or report data (or use power).
- * @return Current Z-axis standby enabled status
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_ZA_BIT
- */
-bool MPU9250::getStandbyZAccelEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_ZA_BIT, buffer);
-    return buffer[0];
-}
-/** Set Z-axis accelerometer standby enabled status.
- * @param New Z-axis standby enabled status
- * @see getStandbyZAccelEnabled()
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_ZA_BIT
- */
-void MPU9250::setStandbyZAccelEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_ZA_BIT, enabled);
-}
-/** Get X-axis gyroscope standby enabled status.
- * If enabled, the X-axis will not gather or report data (or use power).
- * @return Current X-axis standby enabled status
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_XG_BIT
- */
-bool MPU9250::getStandbyXGyroEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_XG_BIT, buffer);
-    return buffer[0];
-}
-/** Set X-axis gyroscope standby enabled status.
- * @param New X-axis standby enabled status
- * @see getStandbyXGyroEnabled()
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_XG_BIT
- */
-void MPU9250::setStandbyXGyroEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_XG_BIT, enabled);
-}
-/** Get Y-axis gyroscope standby enabled status.
- * If enabled, the Y-axis will not gather or report data (or use power).
- * @return Current Y-axis standby enabled status
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_YG_BIT
- */
-bool MPU9250::getStandbyYGyroEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_YG_BIT, buffer);
-    return buffer[0];
-}
-/** Set Y-axis gyroscope standby enabled status.
- * @param New Y-axis standby enabled status
- * @see getStandbyYGyroEnabled()
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_YG_BIT
- */
-void MPU9250::setStandbyYGyroEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_YG_BIT, enabled);
-}
-/** Get Z-axis gyroscope standby enabled status.
- * If enabled, the Z-axis will not gather or report data (or use power).
- * @return Current Z-axis standby enabled status
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_ZG_BIT
- */
-bool MPU9250::getStandbyZGyroEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_ZG_BIT, buffer);
-    return buffer[0];
-}
-/** Set Z-axis gyroscope standby enabled status.
- * @param New Z-axis standby enabled status
- * @see getStandbyZGyroEnabled()
- * @see MPU9250_RA_PWR_MGMT_2
- * @see MPU9250_PWR2_STBY_ZG_BIT
- */
-void MPU9250::setStandbyZGyroEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_PWR_MGMT_2, MPU9250_PWR2_STBY_ZG_BIT, enabled);
-}
-
-// FIFO_COUNT* registers
-
-/** Get current FIFO buffer size.
- * This value indicates the number of bytes stored in the FIFO buffer. This
- * number is in turn the number of bytes that can be read from the FIFO buffer
- * and it is directly proportional to the number of samples available given the
- * set of sensor data bound to be stored in the FIFO (register 35 and 36).
- * @return Current FIFO buffer size
- */
-uint16_t MPU9250::getFIFOCount() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_FIFO_COUNTH, 2, buffer);
-    return (((uint16_t)buffer[0]) << 8) | buffer[1];
-}
-
-// FIFO_R_W register
-
-/** Get byte from FIFO buffer.
- * This register is used to read and write data from the FIFO buffer. Data is
- * written to the FIFO in order of register number (from lowest to highest). If
- * all the FIFO enable flags (see below) are enabled and all External Sensor
- * Data registers (Registers 73 to 96) are associated with a Slave device, the
- * contents of registers 59 through 96 will be written in order at the Sample
- * Rate.
- *
- * The contents of the sensor data registers (Registers 59 to 96) are written
- * into the FIFO buffer when their corresponding FIFO enable flags are set to 1
- * in FIFO_EN (Register 35). An additional flag for the sensor data registers
- * associated with I2C Slave 3 can be found in I2C_MST_CTRL (Register 36).
- *
- * If the FIFO buffer has overflowed, the status bit FIFO_OFLOW_INT is
- * automatically set to 1. This bit is located in INT_STATUS (Register 58).
- * When the FIFO buffer has overflowed, the oldest data will be lost and new
- * data will be written to the FIFO.
- *
- * If the FIFO buffer is empty, reading this register will return the last byte
- * that was previously read from the FIFO until new data is available. The user
- * should check FIFO_COUNT to ensure that the FIFO buffer is not read when
- * empty.
- *
- * @return Byte from FIFO buffer
- */
-uint8_t MPU9250::getFIFOByte() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_FIFO_R_W, buffer);
-    return buffer[0];
-}
-void MPU9250::getFIFOBytes(uint8_t *data, uint8_t length) {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_FIFO_R_W, length, data);
-}
-/** Write byte to FIFO buffer.
- * @see getFIFOByte()
- * @see MPU9250_RA_FIFO_R_W
- */
-void MPU9250::setFIFOByte(uint8_t data) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_FIFO_R_W, data);
-}
-
-// WHO_AM_I register
-
-/** Get Device ID.
- * This register is used to verify the identity of the device (0b110100, 0x34).
- * @return Device ID (6 bits only! should be 0x34)
- * @see MPU9250_RA_WHO_AM_I
- * @see MPU9250_WHO_AM_I_BIT
- * @see MPU9250_WHO_AM_I_LENGTH
- */
-uint8_t MPU9250::getDeviceID() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_WHO_AM_I, MPU9250_WHO_AM_I_BIT, MPU9250_WHO_AM_I_LENGTH, buffer);
-    return buffer[0];
-}
-
-/** Set Device ID.
- * Write a new ID into the WHO_AM_I register (no idea why this should ever be
- * necessary though).
- * @param id New device ID to set.
- * @see getDeviceID()
- * @see MPU9250_RA_WHO_AM_I
- * @see MPU9250_WHO_AM_I_BIT
- * @see MPU9250_WHO_AM_I_LENGTH
- */
-void MPU9250::setDeviceID(uint8_t id) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_WHO_AM_I, MPU9250_WHO_AM_I_BIT, MPU9250_WHO_AM_I_LENGTH, id);
-}
-
-// ======== UNDOCUMENTED/DMP REGISTERS/METHODS ========
-
-// XG_OFFS_TC register
-
-uint8_t MPU9250::getOTPBankValid() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_XG_OFFS_TC, MPU9250_TC_OTP_BNK_VLD_BIT, buffer);
-    return buffer[0];
-}
-void MPU9250::setOTPBankValid(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_XG_OFFS_TC, MPU9250_TC_OTP_BNK_VLD_BIT, enabled);
-}
-int8_t MPU9250::getXGyroOffset() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_XG_OFFS_TC, MPU9250_TC_OFFSET_BIT, MPU9250_TC_OFFSET_LENGTH, buffer);
-    return buffer[0];
-}
-void MPU9250::setXGyroOffset(int8_t offset) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_XG_OFFS_TC, MPU9250_TC_OFFSET_BIT, MPU9250_TC_OFFSET_LENGTH, offset);
-}
-
-// YG_OFFS_TC register
-
-int8_t MPU9250::getYGyroOffset() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_YG_OFFS_TC, MPU9250_TC_OFFSET_BIT, MPU9250_TC_OFFSET_LENGTH, buffer);
-    return buffer[0];
-}
-void MPU9250::setYGyroOffset(int8_t offset) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_YG_OFFS_TC, MPU9250_TC_OFFSET_BIT, MPU9250_TC_OFFSET_LENGTH, offset);
-}
-
-// ZG_OFFS_TC register
-
-int8_t MPU9250::getZGyroOffset() {
-    I2Cdev::readBits(devAddr, MPU9250_RA_ZG_OFFS_TC, MPU9250_TC_OFFSET_BIT, MPU9250_TC_OFFSET_LENGTH, buffer);
-    return buffer[0];
-}
-void MPU9250::setZGyroOffset(int8_t offset) {
-    I2Cdev::writeBits(devAddr, MPU9250_RA_ZG_OFFS_TC, MPU9250_TC_OFFSET_BIT, MPU9250_TC_OFFSET_LENGTH, offset);
-}
-
-// X_FINE_GAIN register
-
-int8_t MPU9250::getXFineGain() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_X_FINE_GAIN, buffer);
-    return buffer[0];
-}
-void MPU9250::setXFineGain(int8_t gain) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_X_FINE_GAIN, gain);
-}
-
-// Y_FINE_GAIN register
-
-int8_t MPU9250::getYFineGain() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_Y_FINE_GAIN, buffer);
-    return buffer[0];
-}
-void MPU9250::setYFineGain(int8_t gain) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_Y_FINE_GAIN, gain);
-}
-
-// Z_FINE_GAIN register
-
-int8_t MPU9250::getZFineGain() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_Z_FINE_GAIN, buffer);
-    return buffer[0];
-}
-void MPU9250::setZFineGain(int8_t gain) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_Z_FINE_GAIN, gain);
-}
-
-// XA_OFFS_* registers
-
-int16_t MPU9250::getXAccelOffset() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_XA_OFFS_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-void MPU9250::setXAccelOffset(int16_t offset) {
-    I2Cdev::writeWord(devAddr, MPU9250_RA_XA_OFFS_H, offset);
-}
-
-// YA_OFFS_* register
-
-int16_t MPU9250::getYAccelOffset() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_YA_OFFS_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-void MPU9250::setYAccelOffset(int16_t offset) {
-    I2Cdev::writeWord(devAddr, MPU9250_RA_YA_OFFS_H, offset);
-}
-
-// ZA_OFFS_* register
-
-int16_t MPU9250::getZAccelOffset() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_ZA_OFFS_H, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-void MPU9250::setZAccelOffset(int16_t offset) {
-    I2Cdev::writeWord(devAddr, MPU9250_RA_ZA_OFFS_H, offset);
-}
-
-// XG_OFFS_USR* registers
-
-int16_t MPU9250::getXGyroOffsetUser() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_XG_OFFS_USRH, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-void MPU9250::setXGyroOffsetUser(int16_t offset) {
-    I2Cdev::writeWord(devAddr, MPU9250_RA_XG_OFFS_USRH, offset);
-}
-
-// YG_OFFS_USR* register
-
-int16_t MPU9250::getYGyroOffsetUser() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_YG_OFFS_USRH, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-void MPU9250::setYGyroOffsetUser(int16_t offset) {
-    I2Cdev::writeWord(devAddr, MPU9250_RA_YG_OFFS_USRH, offset);
-}
-
-// ZG_OFFS_USR* register
-
-int16_t MPU9250::getZGyroOffsetUser() {
-    I2Cdev::readBytes(devAddr, MPU9250_RA_ZG_OFFS_USRH, 2, buffer);
-    return (((int16_t)buffer[0]) << 8) | buffer[1];
-}
-void MPU9250::setZGyroOffsetUser(int16_t offset) {
-    I2Cdev::writeWord(devAddr, MPU9250_RA_ZG_OFFS_USRH, offset);
-}
-
-// INT_ENABLE register (DMP functions)
-
-bool MPU9250::getIntPLLReadyEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_PLL_RDY_INT_BIT, buffer);
-    return buffer[0];
-}
-void MPU9250::setIntPLLReadyEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_PLL_RDY_INT_BIT, enabled);
-}
-bool MPU9250::getIntDMPEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_DMP_INT_BIT, buffer);
-    return buffer[0];
-}
-void MPU9250::setIntDMPEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_INT_ENABLE, MPU9250_INTERRUPT_DMP_INT_BIT, enabled);
-}
-
-// DMP_INT_STATUS
-
-bool MPU9250::getDMPInt5Status() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_DMP_INT_STATUS, MPU9250_DMPINT_5_BIT, buffer);
-    return buffer[0];
-}
-bool MPU9250::getDMPInt4Status() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_DMP_INT_STATUS, MPU9250_DMPINT_4_BIT, buffer);
-    return buffer[0];
-}
-bool MPU9250::getDMPInt3Status() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_DMP_INT_STATUS, MPU9250_DMPINT_3_BIT, buffer);
-    return buffer[0];
-}
-bool MPU9250::getDMPInt2Status() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_DMP_INT_STATUS, MPU9250_DMPINT_2_BIT, buffer);
-    return buffer[0];
-}
-bool MPU9250::getDMPInt1Status() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_DMP_INT_STATUS, MPU9250_DMPINT_1_BIT, buffer);
-    return buffer[0];
-}
-bool MPU9250::getDMPInt0Status() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_DMP_INT_STATUS, MPU9250_DMPINT_0_BIT, buffer);
-    return buffer[0];
-}
-
-// INT_STATUS register (DMP functions)
-
-bool MPU9250::getIntPLLReadyStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_PLL_RDY_INT_BIT, buffer);
-    return buffer[0];
-}
-bool MPU9250::getIntDMPStatus() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_INT_STATUS, MPU9250_INTERRUPT_DMP_INT_BIT, buffer);
-    return buffer[0];
-}
-
-// USER_CTRL register (DMP functions)
-
-bool MPU9250::getDMPEnabled() {
-    I2Cdev::readBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_DMP_EN_BIT, buffer);
-    return buffer[0];
-}
-void MPU9250::setDMPEnabled(bool enabled) {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_DMP_EN_BIT, enabled);
-}
-void MPU9250::resetDMP() {
-    I2Cdev::writeBit(devAddr, MPU9250_RA_USER_CTRL, MPU9250_USERCTRL_DMP_RESET_BIT, true);
-}
-
-// BANK_SEL register
-
-void MPU9250::setMemoryBank(uint8_t bank, bool prefetchEnabled, bool userBank) {
-    bank &= 0x1F;
-    if (userBank) bank |= 0x20;
-    if (prefetchEnabled) bank |= 0x40;
-    I2Cdev::writeByte(devAddr, MPU9250_RA_BANK_SEL, bank);
-}
-
-// MEM_START_ADDR register
-
-void MPU9250::setMemoryStartAddress(uint8_t address) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_MEM_START_ADDR, address);
-}
-
-// MEM_R_W register
-
-uint8_t MPU9250::readMemoryByte() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_MEM_R_W, buffer);
-    return buffer[0];
-}
-void MPU9250::writeMemoryByte(uint8_t data) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_MEM_R_W, data);
-}
-void MPU9250::readMemoryBlock(uint8_t *data, uint16_t dataSize, uint8_t bank, uint8_t address) {
-    setMemoryBank(bank);
-    setMemoryStartAddress(address);
-    uint8_t chunkSize;
-    for (uint16_t i = 0; i < dataSize;) {
-        // determine correct chunk size according to bank position and data size
-        chunkSize = MPU9250_DMP_MEMORY_CHUNK_SIZE;
-
-        // make sure we don't go past the data size
-        if (i + chunkSize > dataSize) chunkSize = dataSize - i;
-
-        // make sure this chunk doesn't go past the bank boundary (256 bytes)
-        if (chunkSize > 256 - address) chunkSize = 256 - address;
-
-        // read the chunk of data as specified
-        I2Cdev::readBytes(devAddr, MPU9250_RA_MEM_R_W, chunkSize, data + i);
-
-        // increase byte index by [chunkSize]
-        i += chunkSize;
-
-        // uint8_t automatically wraps to 0 at 256
-        address += chunkSize;
-
-        // if we aren't done, update bank (if necessary) and address
-        if (i < dataSize) {
-            if (address == 0) bank++;
-            setMemoryBank(bank);
-            setMemoryStartAddress(address);
-        }
+/* MPU9250 object, input the I2C bus and address */
+MPU9250::MPU9250(I2C_t &bus,uint8_t address){
+  _i2c = &bus; // I2C bus
+  _address = address; // I2C address
+  _useSPI = false; // set to use I2C
+}
+
+/* MPU9250 object, input the SPI bus and chip select pin */
+MPU9250::MPU9250(SPIClass &bus,uint8_t csPin){
+  _spi = &bus; // SPI bus
+  _csPin = csPin; // chip select pin
+  _useSPI = true; // set to use SPI
+}
+
+/* starts communication with the MPU-9250 */
+int MPU9250::begin(){
+  if( _useSPI ) { // using SPI for communication
+    // use low speed SPI for register setting
+    _useSPIHS = false;
+    // setting CS pin to output
+    pinMode(_csPin,OUTPUT);
+    // setting CS pin high
+    digitalWrite(_csPin,HIGH);
+    // begin SPI communication
+    _spi->begin();
+  } else { // using I2C for communication
+    // starting the I2C bus
+    _i2c->begin();
+    // setting the I2C clock
+    // _i2c->setClock(_i2cRate);
+  }
+  while(true)
+  {
+    int res = whoAmI();
+    Serial.printf("whoAmI() %d\r\n", res);
+    // _i2c->reset();
+    if(res == 113 || res == 115)
+    {
+      break;
     }
+  }
+  // select clock source to gyro
+  if(writeRegister(PWR_MGMNT_1,CLOCK_SEL_PLL) < 0){
+    return -1;
+  }
+  // enable I2C master mode
+  if(writeRegister(USER_CTRL,I2C_MST_EN) < 0){
+    return -2;
+  }
+  // set the I2C bus speed to 400 kHz
+  if(writeRegister(I2C_MST_CTRL,I2C_MST_CLK) < 0){
+    return -3;
+  }
+  // set AK8963 to Power Down
+  writeAK8963Register(AK8963_CNTL1,AK8963_PWR_DOWN);
+  // reset the MPU9250
+  writeRegister(PWR_MGMNT_1,PWR_RESET);
+  // wait for MPU-9250 to come back up
+  delay(1);
+  // reset the AK8963
+  writeAK8963Register(AK8963_CNTL2,AK8963_RESET);
+  // select clock source to gyro
+  if(writeRegister(PWR_MGMNT_1,CLOCK_SEL_PLL) < 0){
+    return -4;
+  }
+  // check the WHO AM I byte, expected value is 0x71 (decimal 113) or 0x73 (decimal 115)
+  if((whoAmI() != 113)&&(whoAmI() != 115)){
+    return -5;
+  }
+  // enable accelerometer and gyro
+  if(writeRegister(PWR_MGMNT_2,SEN_ENABLE) < 0){
+    return -6;
+  }
+  // setting accel range to 16G as default
+  if(writeRegister(ACCEL_CONFIG,ACCEL_FS_SEL_16G) < 0){
+    return -7;
+  }
+  _accelScale = G * 16.0f/32767.5f; // setting the accel scale to 16G
+  _accelRange = ACCEL_RANGE_16G;
+  // setting the gyro range to 2000DPS as default
+  if(writeRegister(GYRO_CONFIG,GYRO_FS_SEL_2000DPS) < 0){
+    return -8;
+  }
+  _gyroScale = 2000.0f/32767.5f * _d2r; // setting the gyro scale to 2000DPS
+  _gyroRange = GYRO_RANGE_2000DPS;
+  // setting bandwidth to 184Hz as default
+  if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_184) < 0){ 
+    return -9;
+  } 
+  if(writeRegister(CONFIG,GYRO_DLPF_184) < 0){ // setting gyro bandwidth to 184Hz
+    return -10;
+  }
+  _bandwidth = DLPF_BANDWIDTH_184HZ;
+  // setting the sample rate divider to 0 as default
+  if(writeRegister(SMPDIV,0x00) < 0){ 
+    return -11;
+  } 
+  _srd = 0;
+  // enable I2C master mode
+  if(writeRegister(USER_CTRL,I2C_MST_EN) < 0){
+  	return -12;
+  }
+	// set the I2C bus speed to 400 kHz
+	if( writeRegister(I2C_MST_CTRL,I2C_MST_CLK) < 0){
+		return -13;
+	}
+	// check AK8963 WHO AM I register, expected value is 0x48 (decimal 72)
+	if( whoAmIAK8963() != 72 ){
+    esp_restart();
+    return -14;
+	}
+  /* get the magnetometer calibration */
+  // set AK8963 to Power Down
+  if(writeAK8963Register(AK8963_CNTL1,AK8963_PWR_DOWN) < 0){
+    return -15;
+  }
+  delay(100); // long wait between AK8963 mode changes
+  // set AK8963 to FUSE ROM access
+  if(writeAK8963Register(AK8963_CNTL1,AK8963_FUSE_ROM) < 0){
+    return -16;
+  }
+  delay(100); // long wait between AK8963 mode changes
+  // read the AK8963 ASA registers and compute magnetometer scale factors
+  readAK8963Registers(AK8963_ASA,3,_buffer);
+  _magScaleX = ((((float)_buffer[0]) - 128.0f)/(256.0f) + 1.0f) * 4912.0f / 32760.0f; // micro Tesla
+  _magScaleY = ((((float)_buffer[1]) - 128.0f)/(256.0f) + 1.0f) * 4912.0f / 32760.0f; // micro Tesla
+  _magScaleZ = ((((float)_buffer[2]) - 128.0f)/(256.0f) + 1.0f) * 4912.0f / 32760.0f; // micro Tesla 
+  printf("RawData (%hd, %hd, %hd) \r\n", _magScaleX, _magScaleY, _magScaleZ);
+
+  // set AK8963 to Power Down
+  if(writeAK8963Register(AK8963_CNTL1,AK8963_PWR_DOWN) < 0){
+    return -17;
+  }
+  delay(100); // long wait between AK8963 mode changes  
+  // set AK8963 to 16 bit resolution, 100 Hz update rate
+  if(writeAK8963Register(AK8963_CNTL1,AK8963_CNT_MEAS2) < 0){
+    return -18;
+  }
+  delay(100); // long wait between AK8963 mode changes
+  // select clock source to gyro
+  if(writeRegister(PWR_MGMNT_1,CLOCK_SEL_PLL) < 0){
+    return -19;
+  }       
+  // instruct the MPU9250 to get 7 bytes of data from the AK8963 at the sample rate
+  readAK8963Registers(AK8963_HXL,7,_buffer);
+  // estimate gyro bias
+  if (calibrateGyro() < 0) {
+    return -20;
+  }
+  // successful init, return 1
+  return 1;
 }
-bool MPU9250::writeMemoryBlock(const uint8_t *data, uint16_t dataSize, uint8_t bank, uint8_t address, bool verify, bool useProgMem) {
-    setMemoryBank(bank);
-    setMemoryStartAddress(address);
-    uint8_t chunkSize;
-    uint8_t *verifyBuffer;
-    uint8_t *progBuffer;
-    uint16_t i;
-    uint8_t j;
-    if (verify) verifyBuffer = (uint8_t *)malloc(MPU9250_DMP_MEMORY_CHUNK_SIZE);
-    if (useProgMem) progBuffer = (uint8_t *)malloc(MPU9250_DMP_MEMORY_CHUNK_SIZE);
-    for (i = 0; i < dataSize;) {
-        // determine correct chunk size according to bank position and data size
-        chunkSize = MPU9250_DMP_MEMORY_CHUNK_SIZE;
 
-        // make sure we don't go past the data size
-        if (i + chunkSize > dataSize) chunkSize = dataSize - i;
-
-        // make sure this chunk doesn't go past the bank boundary (256 bytes)
-        if (chunkSize > 256 - address) chunkSize = 256 - address;
-
-        if (useProgMem) {
-            // write the chunk of data as specified
-            for (j = 0; j < chunkSize; j++) progBuffer[j] = pgm_read_byte(data + i + j);
-        } else {
-            // write the chunk of data as specified
-            progBuffer = (uint8_t *)data + i;
-        }
-
-        I2Cdev::writeBytes(devAddr, MPU9250_RA_MEM_R_W, chunkSize, progBuffer);
-
-        // verify data if needed
-        if (verify && verifyBuffer) {
-            setMemoryBank(bank);
-            setMemoryStartAddress(address);
-            I2Cdev::readBytes(devAddr, MPU9250_RA_MEM_R_W, chunkSize, verifyBuffer);
-            if (memcmp(progBuffer, verifyBuffer, chunkSize) != 0) {
-                /*Serial.print("Block write verification error, bank ");
-                Serial.print(bank, DEC);
-                Serial.print(", address ");
-                Serial.print(address, DEC);
-                Serial.print("!\nExpected:");
-                for (j = 0; j < chunkSize; j++) {
-                    Serial.print(" 0x");
-                    if (progBuffer[j] < 16) Serial.print("0");
-                    Serial.print(progBuffer[j], HEX);
-                }
-                Serial.print("\nReceived:");
-                for (uint8_t j = 0; j < chunkSize; j++) {
-                    Serial.print(" 0x");
-                    if (verifyBuffer[i + j] < 16) Serial.print("0");
-                    Serial.print(verifyBuffer[i + j], HEX);
-                }
-                Serial.print("\n");*/
-                free(verifyBuffer);
-                if (useProgMem) free(progBuffer);
-                return false; // uh oh.
-            }
-        }
-
-        // increase byte index by [chunkSize]
-        i += chunkSize;
-
-        // uint8_t automatically wraps to 0 at 256
-        address += chunkSize;
-
-        // if we aren't done, update bank (if necessary) and address
-        if (i < dataSize) {
-            if (address == 0) bank++;
-            setMemoryBank(bank);
-            setMemoryStartAddress(address);
-        }
+/* sets the accelerometer full scale range to values other than default */
+int MPU9250::setAccelRange(AccelRange range) {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  switch(range) {
+    case ACCEL_RANGE_2G: {
+      // setting the accel range to 2G
+      if(writeRegister(ACCEL_CONFIG,ACCEL_FS_SEL_2G) < 0){
+        return -1;
+      }
+      _accelScale = G * 2.0f/32767.5f; // setting the accel scale to 2G
+      break; 
     }
-    if (verify) free(verifyBuffer);
-    if (useProgMem) free(progBuffer);
-    return true;
-}
-bool MPU9250::writeProgMemoryBlock(const uint8_t *data, uint16_t dataSize, uint8_t bank, uint8_t address, bool verify) {
-    return writeMemoryBlock(data, dataSize, bank, address, verify, true);
-}
-bool MPU9250::writeDMPConfigurationSet(const uint8_t *data, uint16_t dataSize, bool useProgMem) {
-    uint8_t *progBuffer, success, special;
-    uint16_t i, j;
-    if (useProgMem) {
-        progBuffer = (uint8_t *)malloc(8); // assume 8-byte blocks, realloc later if necessary
+    case ACCEL_RANGE_4G: {
+      // setting the accel range to 4G
+      if(writeRegister(ACCEL_CONFIG,ACCEL_FS_SEL_4G) < 0){
+        return -1;
+      }
+      _accelScale = G * 4.0f/32767.5f; // setting the accel scale to 4G
+      break;
     }
-
-    // config set data is a long string of blocks with the following structure:
-    // [bank] [offset] [length] [byte[0], byte[1], ..., byte[length]]
-    uint8_t bank, offset, length;
-    for (i = 0; i < dataSize;) {
-        if (useProgMem) {
-            bank = pgm_read_byte(data + i++);
-            offset = pgm_read_byte(data + i++);
-            length = pgm_read_byte(data + i++);
-        } else {
-            bank = data[i++];
-            offset = data[i++];
-            length = data[i++];
-        }
-
-        // write data or perform special action
-        if (length > 0) {
-            // regular block of data to write
-            /*Serial.print("Writing config block to bank ");
-            Serial.print(bank);
-            Serial.print(", offset ");
-            Serial.print(offset);
-            Serial.print(", length=");
-            Serial.println(length);*/
-            if (useProgMem) {
-                if (sizeof(progBuffer) < length) progBuffer = (uint8_t *)realloc(progBuffer, length);
-                for (j = 0; j < length; j++) progBuffer[j] = pgm_read_byte(data + i + j);
-            } else {
-                progBuffer = (uint8_t *)data + i;
-            }
-            success = writeMemoryBlock(progBuffer, length, bank, offset, true);
-            i += length;
-        } else {
-            // special instruction
-            // NOTE: this kind of behavior (what and when to do certain things)
-            // is totally undocumented. This code is in here based on observed
-            // behavior only, and exactly why (or even whether) it has to be here
-            // is anybody's guess for now.
-            if (useProgMem) {
-                special = pgm_read_byte(data + i++);
-            } else {
-                special = data[i++];
-            }
-            /*Serial.print("Special command code ");
-            Serial.print(special, HEX);
-            Serial.println(" found...");*/
-            if (special == 0x01) {
-                // enable DMP-related interrupts
-
-                //setIntZeroMotionEnabled(true);
-                //setIntFIFOBufferOverflowEnabled(true);
-                //setIntDMPEnabled(true);
-                I2Cdev::writeByte(devAddr, MPU9250_RA_INT_ENABLE, 0x32);  // single operation
-
-                success = true;
-            } else {
-                // unknown special command
-                success = false;
-            }
-        }
-
-        if (!success) {
-            if (useProgMem) free(progBuffer);
-            return false; // uh oh
-        }
+    case ACCEL_RANGE_8G: {
+      // setting the accel range to 8G
+      if(writeRegister(ACCEL_CONFIG,ACCEL_FS_SEL_8G) < 0){
+        return -1;
+      }
+      _accelScale = G * 8.0f/32767.5f; // setting the accel scale to 8G
+      break;
     }
-    if (useProgMem) free(progBuffer);
-    return true;
-}
-bool MPU9250::writeProgDMPConfigurationSet(const uint8_t *data, uint16_t dataSize) {
-    return writeDMPConfigurationSet(data, dataSize, true);
-}
-
-// DMP_CFG_1 register
-
-uint8_t MPU9250::getDMPConfig1() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_DMP_CFG_1, buffer);
-    return buffer[0];
-}
-void MPU9250::setDMPConfig1(uint8_t config) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_DMP_CFG_1, config);
+    case ACCEL_RANGE_16G: {
+      // setting the accel range to 16G
+      if(writeRegister(ACCEL_CONFIG,ACCEL_FS_SEL_16G) < 0){
+        return -1;
+      }
+      _accelScale = G * 16.0f/32767.5f; // setting the accel scale to 16G
+      break;
+    }
+  }
+  _accelRange = range;
+  return 1;
 }
 
-// DMP_CFG_2 register
-
-uint8_t MPU9250::getDMPConfig2() {
-    I2Cdev::readByte(devAddr, MPU9250_RA_DMP_CFG_2, buffer);
-    return buffer[0];
+/* sets the gyro full scale range to values other than default */
+int MPU9250::setGyroRange(GyroRange range) {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  switch(range) {
+    case GYRO_RANGE_250DPS: {
+      // setting the gyro range to 250DPS
+      if(writeRegister(GYRO_CONFIG,GYRO_FS_SEL_250DPS) < 0){
+        return -1;
+      }
+      _gyroScale = 250.0f/32767.5f * _d2r; // setting the gyro scale to 250DPS
+      break;
+    }
+    case GYRO_RANGE_500DPS: {
+      // setting the gyro range to 500DPS
+      if(writeRegister(GYRO_CONFIG,GYRO_FS_SEL_500DPS) < 0){
+        return -1;
+      }
+      _gyroScale = 500.0f/32767.5f * _d2r; // setting the gyro scale to 500DPS
+      break;  
+    }
+    case GYRO_RANGE_1000DPS: {
+      // setting the gyro range to 1000DPS
+      if(writeRegister(GYRO_CONFIG,GYRO_FS_SEL_1000DPS) < 0){
+        return -1;
+      }
+      _gyroScale = 1000.0f/32767.5f * _d2r; // setting the gyro scale to 1000DPS
+      break;
+    }
+    case GYRO_RANGE_2000DPS: {
+      // setting the gyro range to 2000DPS
+      if(writeRegister(GYRO_CONFIG,GYRO_FS_SEL_2000DPS) < 0){
+        return -1;
+      }
+      _gyroScale = 2000.0f/32767.5f * _d2r; // setting the gyro scale to 2000DPS
+      break;
+    }
+  }
+  _gyroRange = range;
+  return 1;
 }
-void MPU9250::setDMPConfig2(uint8_t config) {
-    I2Cdev::writeByte(devAddr, MPU9250_RA_DMP_CFG_2, config);
+
+/* sets the DLPF bandwidth to values other than default */
+int MPU9250::setDlpfBandwidth(DlpfBandwidth bandwidth) {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  switch(bandwidth) {
+    case DLPF_BANDWIDTH_184HZ: {
+      if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_184) < 0){ // setting accel bandwidth to 184Hz
+        return -1;
+      } 
+      if(writeRegister(CONFIG,GYRO_DLPF_184) < 0){ // setting gyro bandwidth to 184Hz
+        return -2;
+      }
+      break;
+    }
+    case DLPF_BANDWIDTH_92HZ: {
+      if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_92) < 0){ // setting accel bandwidth to 92Hz
+        return -1;
+      } 
+      if(writeRegister(CONFIG,GYRO_DLPF_92) < 0){ // setting gyro bandwidth to 92Hz
+        return -2;
+      }
+      break;
+    }
+    case DLPF_BANDWIDTH_41HZ: {
+      if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_41) < 0){ // setting accel bandwidth to 41Hz
+        return -1;
+      } 
+      if(writeRegister(CONFIG,GYRO_DLPF_41) < 0){ // setting gyro bandwidth to 41Hz
+        return -2;
+      }
+      break;
+    }
+    case DLPF_BANDWIDTH_20HZ: {
+      if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_20) < 0){ // setting accel bandwidth to 20Hz
+        return -1;
+      } 
+      if(writeRegister(CONFIG,GYRO_DLPF_20) < 0){ // setting gyro bandwidth to 20Hz
+        return -2;
+      }
+      break;
+    }
+    case DLPF_BANDWIDTH_10HZ: {
+      if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_10) < 0){ // setting accel bandwidth to 10Hz
+        return -1;
+      } 
+      if(writeRegister(CONFIG,GYRO_DLPF_10) < 0){ // setting gyro bandwidth to 10Hz
+        return -2;
+      }
+      break;
+    }
+    case DLPF_BANDWIDTH_5HZ: {
+      if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_5) < 0){ // setting accel bandwidth to 5Hz
+        return -1;
+      } 
+      if(writeRegister(CONFIG,GYRO_DLPF_5) < 0){ // setting gyro bandwidth to 5Hz
+        return -2;
+      }
+      break;
+    }
+  }
+  _bandwidth = bandwidth;
+  return 1;
+}
+
+/* sets the sample rate divider to values other than default */
+int MPU9250::setSrd(uint8_t srd) {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  /* setting the sample rate divider to 19 to facilitate setting up magnetometer */
+  if(writeRegister(SMPDIV,19) < 0){ // setting the sample rate divider
+    return -1;
+  }
+  if(srd > 9){
+    // set AK8963 to Power Down
+    if(writeAK8963Register(AK8963_CNTL1,AK8963_PWR_DOWN) < 0){
+      return -2;
+    }
+    delay(100); // long wait between AK8963 mode changes  
+    // set AK8963 to 16 bit resolution, 8 Hz update rate
+    if(writeAK8963Register(AK8963_CNTL1,AK8963_CNT_MEAS1) < 0){
+      return -3;
+    }
+    delay(100); // long wait between AK8963 mode changes     
+    // instruct the MPU9250 to get 7 bytes of data from the AK8963 at the sample rate
+    readAK8963Registers(AK8963_HXL,7,_buffer);
+  } else {
+    // set AK8963 to Power Down
+    if(writeAK8963Register(AK8963_CNTL1,AK8963_PWR_DOWN) < 0){
+      return -2;
+    }
+    delay(100); // long wait between AK8963 mode changes  
+    // set AK8963 to 16 bit resolution, 100 Hz update rate
+    if(writeAK8963Register(AK8963_CNTL1,AK8963_CNT_MEAS2) < 0){
+      return -3;
+    }
+    delay(100); // long wait between AK8963 mode changes     
+    // instruct the MPU9250 to get 7 bytes of data from the AK8963 at the sample rate
+    readAK8963Registers(AK8963_HXL,7,_buffer);    
+  } 
+  /* setting the sample rate divider */
+  if(writeRegister(SMPDIV,srd) < 0){ // setting the sample rate divider
+    return -4;
+  } 
+  _srd = srd;
+  return 1; 
+}
+
+/* enables the data ready interrupt */
+int MPU9250::enableDataReadyInterrupt() {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  /* setting the interrupt */
+  if (writeRegister(INT_PIN_CFG,INT_PULSE_50US) < 0){ // setup interrupt, 50 us pulse
+    return -1;
+  }  
+  if (writeRegister(INT_ENABLE,INT_RAW_RDY_EN) < 0){ // set to data ready
+    return -2;
+  }
+  return 1;
+}
+
+/* disables the data ready interrupt */
+int MPU9250::disableDataReadyInterrupt() {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  if(writeRegister(INT_ENABLE,INT_DISABLE) < 0){ // disable interrupt
+    return -1;
+  }  
+  return 1;
+}
+
+/* configures and enables wake on motion, low power mode */
+int MPU9250::enableWakeOnMotion(float womThresh_mg,LpAccelOdr odr) {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  // set AK8963 to Power Down
+  writeAK8963Register(AK8963_CNTL1,AK8963_PWR_DOWN);
+  // reset the MPU9250
+  writeRegister(PWR_MGMNT_1,PWR_RESET);
+  // wait for MPU-9250 to come back up
+  delay(1);
+  if(writeRegister(PWR_MGMNT_1,0x00) < 0){ // cycle 0, sleep 0, standby 0
+    return -1;
+  } 
+  if(writeRegister(PWR_MGMNT_2,DIS_GYRO) < 0){ // disable gyro measurements
+    return -2;
+  } 
+  if(writeRegister(ACCEL_CONFIG2,ACCEL_DLPF_184) < 0){ // setting accel bandwidth to 184Hz
+    return -3;
+  } 
+  if(writeRegister(INT_ENABLE,INT_WOM_EN) < 0){ // enabling interrupt to wake on motion
+    return -4;
+  } 
+  if(writeRegister(MOT_DETECT_CTRL,(ACCEL_INTEL_EN | ACCEL_INTEL_MODE)) < 0){ // enabling accel hardware intelligence
+    return -5;
+  } 
+  _womThreshold = map(womThresh_mg, 0, 1020, 0, 255);
+  if(writeRegister(WOM_THR,_womThreshold) < 0){ // setting wake on motion threshold
+    return -6;
+  }
+  if(writeRegister(LP_ACCEL_ODR,(uint8_t)odr) < 0){ // set frequency of wakeup
+    return -7;
+  }
+  if(writeRegister(PWR_MGMNT_1,PWR_CYCLE) < 0){ // switch to accel low power mode
+    return -8;
+  }
+  return 1;
+}
+
+/* configures and enables the FIFO buffer  */
+int MPU9250FIFO::enableFifo(bool accel,bool gyro,bool mag,bool temp) {
+  // use low speed SPI for register setting
+  _useSPIHS = false;
+  if(writeRegister(USER_CTRL, (0x40 | I2C_MST_EN)) < 0){
+    return -1;
+  }
+  if(writeRegister(FIFO_EN,(accel*FIFO_ACCEL)|(gyro*FIFO_GYRO)|(mag*FIFO_MAG)|(temp*FIFO_TEMP)) < 0){
+    return -2;
+  }
+  _enFifoAccel = accel;
+  _enFifoGyro = gyro;
+  _enFifoMag = mag;
+  _enFifoTemp = temp;
+  _fifoFrameSize = accel*6 + gyro*6 + mag*7 + temp*2;
+  return 1;
+}
+
+/* reads the most current data from MPU9250 and stores in buffer */
+int MPU9250::readSensor() {
+  _useSPIHS = true; // use the high speed SPI for data readout
+  // grab the data from the MPU9250
+  if (readRegisters(ACCEL_OUT, 21, _buffer) < 0) {
+    return -1;
+  }
+  // combine into 16 bit values
+  _axcounts = (((int16_t)_buffer[0]) << 8) | _buffer[1];  
+  _aycounts = (((int16_t)_buffer[2]) << 8) | _buffer[3];
+  _azcounts = (((int16_t)_buffer[4]) << 8) | _buffer[5];
+  _tcounts = (((int16_t)_buffer[6]) << 8) | _buffer[7];
+  _gxcounts = (((int16_t)_buffer[8]) << 8) | _buffer[9];
+  _gycounts = (((int16_t)_buffer[10]) << 8) | _buffer[11];
+  _gzcounts = (((int16_t)_buffer[12]) << 8) | _buffer[13];
+  _hxcounts = (((int16_t)_buffer[15]) << 8) | _buffer[14];
+  _hycounts = (((int16_t)_buffer[17]) << 8) | _buffer[16];
+  _hzcounts = (((int16_t)_buffer[19]) << 8) | _buffer[18];
+  
+  // transform and convert to float values
+  _ax = (((float)(tX[0]*_axcounts + tX[1]*_aycounts + tX[2]*_azcounts) * _accelScale) - _axb)*_axs;
+  _ay = (((float)(tY[0]*_axcounts + tY[1]*_aycounts + tY[2]*_azcounts) * _accelScale) - _ayb)*_ays;
+  _az = (((float)(tZ[0]*_axcounts + tZ[1]*_aycounts + tZ[2]*_azcounts) * _accelScale) - _azb)*_azs;
+  _gx = ((float)(tX[0]*_gxcounts + tX[1]*_gycounts + tX[2]*_gzcounts) * _gyroScale) - _gxb;
+  _gy = ((float)(tY[0]*_gxcounts + tY[1]*_gycounts + tY[2]*_gzcounts) * _gyroScale) - _gyb;
+  _gz = ((float)(tZ[0]*_gxcounts + tZ[1]*_gycounts + tZ[2]*_gzcounts) * _gyroScale) - _gzb;
+  _hx = (((float)(_hxcounts) * _magScaleX) - _hxb)*_hxs;
+  _hy = (((float)(_hycounts) * _magScaleY) - _hyb)*_hys;
+  _hz = (((float)(_hzcounts) * _magScaleZ) - _hzb)*_hzs;
+  _t = ((((float) _tcounts) - _tempOffset)/_tempScale) + _tempOffset;
+  return 1;
+}
+
+/* returns the accelerometer measurement in the x direction, m/s/s */
+float MPU9250::getAccelX_mss() {
+  return _ax;
+}
+
+/* returns the accelerometer measurement in the y direction, m/s/s */
+float MPU9250::getAccelY_mss() {
+  return _ay;
+}
+
+/* returns the accelerometer measurement in the z direction, m/s/s */
+float MPU9250::getAccelZ_mss() {
+  return _az;
+}
+
+/* returns the gyroscope measurement in the x direction, rad/s */
+float MPU9250::getGyroX_rads() {
+  return _gx;
+}
+
+/* returns the gyroscope measurement in the y direction, rad/s */
+float MPU9250::getGyroY_rads() {
+  return _gy;
+}
+
+/* returns the gyroscope measurement in the z direction, rad/s */
+float MPU9250::getGyroZ_rads() {
+  return _gz;
+}
+
+/* returns the magnetometer measurement in the x direction, uT */
+float MPU9250::getMagX_uT() {
+  return _hx;
+}
+
+/* returns the magnetometer measurement in the y direction, uT */
+float MPU9250::getMagY_uT() {
+  return _hy;
+}
+
+/* returns the magnetometer measurement in the z direction, uT */
+float MPU9250::getMagZ_uT() {
+  return _hz;
+}
+
+/* returns the die temperature, C */
+float MPU9250::getTemperature_C() {
+  return _t;
+}
+
+/* reads data from the MPU9250 FIFO and stores in buffer */
+int MPU9250FIFO::readFifo() {
+  _useSPIHS = true; // use the high speed SPI for data readout
+  // get the fifo size
+  readRegisters(FIFO_COUNT, 2, _buffer);
+  _fifoSize = (((uint16_t) (_buffer[0]&0x0F)) <<8) + (((uint16_t) _buffer[1]));
+  // read and parse the buffer
+  for (size_t i=0; i < _fifoSize/_fifoFrameSize; i++) {
+    // grab the data from the MPU9250
+    if (readRegisters(FIFO_READ,_fifoFrameSize,_buffer) < 0) {
+      return -1;
+    }
+    if (_enFifoAccel) {
+      // combine into 16 bit values
+      _axcounts = (((int16_t)_buffer[0]) << 8) | _buffer[1];  
+      _aycounts = (((int16_t)_buffer[2]) << 8) | _buffer[3];
+      _azcounts = (((int16_t)_buffer[4]) << 8) | _buffer[5];
+      // transform and convert to float values
+      _axFifo[i] = (((float)(tX[0]*_axcounts + tX[1]*_aycounts + tX[2]*_azcounts) * _accelScale)-_axb)*_axs;
+      _ayFifo[i] = (((float)(tY[0]*_axcounts + tY[1]*_aycounts + tY[2]*_azcounts) * _accelScale)-_ayb)*_ays;
+      _azFifo[i] = (((float)(tZ[0]*_axcounts + tZ[1]*_aycounts + tZ[2]*_azcounts) * _accelScale)-_azb)*_azs;
+      _aSize = _fifoSize/_fifoFrameSize;
+    }
+    if (_enFifoTemp) {
+      // combine into 16 bit values
+      _tcounts = (((int16_t)_buffer[0 + _enFifoAccel*6]) << 8) | _buffer[1 + _enFifoAccel*6];
+      // transform and convert to float values
+      _tFifo[i] = ((((float) _tcounts) - _tempOffset)/_tempScale) + _tempOffset;
+      _tSize = _fifoSize/_fifoFrameSize;
+    }
+    if (_enFifoGyro) {
+      // combine into 16 bit values
+      _gxcounts = (((int16_t)_buffer[0 + _enFifoAccel*6 + _enFifoTemp*2]) << 8) | _buffer[1 + _enFifoAccel*6 + _enFifoTemp*2];
+      _gycounts = (((int16_t)_buffer[2 + _enFifoAccel*6 + _enFifoTemp*2]) << 8) | _buffer[3 + _enFifoAccel*6 + _enFifoTemp*2];
+      _gzcounts = (((int16_t)_buffer[4 + _enFifoAccel*6 + _enFifoTemp*2]) << 8) | _buffer[5 + _enFifoAccel*6 + _enFifoTemp*2];
+      // transform and convert to float values
+      _gxFifo[i] = ((float)(tX[0]*_gxcounts + tX[1]*_gycounts + tX[2]*_gzcounts) * _gyroScale) - _gxb;
+      _gyFifo[i] = ((float)(tY[0]*_gxcounts + tY[1]*_gycounts + tY[2]*_gzcounts) * _gyroScale) - _gyb;
+      _gzFifo[i] = ((float)(tZ[0]*_gxcounts + tZ[1]*_gycounts + tZ[2]*_gzcounts) * _gyroScale) - _gzb;
+      _gSize = _fifoSize/_fifoFrameSize;
+    }
+    if (_enFifoMag) {
+      // combine into 16 bit values
+      _hxcounts = (((int16_t)_buffer[1 + _enFifoAccel*6 + _enFifoTemp*2 + _enFifoGyro*6]) << 8) | _buffer[0 + _enFifoAccel*6 + _enFifoTemp*2 + _enFifoGyro*6];
+      _hycounts = (((int16_t)_buffer[3 + _enFifoAccel*6 + _enFifoTemp*2 + _enFifoGyro*6]) << 8) | _buffer[2 + _enFifoAccel*6 + _enFifoTemp*2 + _enFifoGyro*6];
+      _hzcounts = (((int16_t)_buffer[5 + _enFifoAccel*6 + _enFifoTemp*2 + _enFifoGyro*6]) << 8) | _buffer[4 + _enFifoAccel*6 + _enFifoTemp*2 + _enFifoGyro*6];
+      // transform and convert to float values
+      _hxFifo[i] = (((float)(_hxcounts) * _magScaleX) - _hxb)*_hxs;
+      _hyFifo[i] = (((float)(_hycounts) * _magScaleY) - _hyb)*_hys;
+      _hzFifo[i] = (((float)(_hzcounts) * _magScaleZ) - _hzb)*_hzs;
+      _hSize = _fifoSize/_fifoFrameSize;
+    }
+  }
+  return 1;
+}
+
+/* returns the accelerometer FIFO size and data in the x direction, m/s/s */
+void MPU9250FIFO::getFifoAccelX_mss(size_t *size,float* data) {
+  *size = _aSize;
+  memcpy(data,_axFifo,_aSize*sizeof(float));
+}
+
+/* returns the accelerometer FIFO size and data in the y direction, m/s/s */
+void MPU9250FIFO::getFifoAccelY_mss(size_t *size,float* data) {
+  *size = _aSize;
+  memcpy(data,_ayFifo,_aSize*sizeof(float));
+}
+
+/* returns the accelerometer FIFO size and data in the z direction, m/s/s */
+void MPU9250FIFO::getFifoAccelZ_mss(size_t *size,float* data) {
+  *size = _aSize;
+  memcpy(data,_azFifo,_aSize*sizeof(float));
+}
+
+/* returns the gyroscope FIFO size and data in the x direction, rad/s */
+void MPU9250FIFO::getFifoGyroX_rads(size_t *size,float* data) {
+  *size = _gSize;
+  memcpy(data,_gxFifo,_gSize*sizeof(float));
+}
+
+/* returns the gyroscope FIFO size and data in the y direction, rad/s */
+void MPU9250FIFO::getFifoGyroY_rads(size_t *size,float* data) {
+  *size = _gSize;
+  memcpy(data,_gyFifo,_gSize*sizeof(float));
+}
+
+/* returns the gyroscope FIFO size and data in the z direction, rad/s */
+void MPU9250FIFO::getFifoGyroZ_rads(size_t *size,float* data) {
+  *size = _gSize;
+  memcpy(data,_gzFifo,_gSize*sizeof(float));
+}
+
+/* returns the magnetometer FIFO size and data in the x direction, uT */
+void MPU9250FIFO::getFifoMagX_uT(size_t *size,float* data) {
+  *size = _hSize;
+  memcpy(data,_hxFifo,_hSize*sizeof(float));
+}
+
+/* returns the magnetometer FIFO size and data in the y direction, uT */
+void MPU9250FIFO::getFifoMagY_uT(size_t *size,float* data) {
+  *size = _hSize;
+  memcpy(data,_hyFifo,_hSize*sizeof(float));
+}
+
+/* returns the magnetometer FIFO size and data in the z direction, uT */
+void MPU9250FIFO::getFifoMagZ_uT(size_t *size,float* data) {
+  *size = _hSize;
+  memcpy(data,_hzFifo,_hSize*sizeof(float));
+}
+
+/* returns the die temperature FIFO size and data, C */
+void MPU9250FIFO::getFifoTemperature_C(size_t *size,float* data) {
+  *size = _tSize;
+  memcpy(data,_tFifo,_tSize*sizeof(float));  
+}
+
+/* estimates the gyro biases */
+int MPU9250::calibrateGyro() {
+  // set the range, bandwidth, and srd
+  if (setGyroRange(GYRO_RANGE_250DPS) < 0) {
+    return -1;
+  }
+  if (setDlpfBandwidth(DLPF_BANDWIDTH_20HZ) < 0) {
+    return -2;
+  }
+  if (setSrd(19) < 0) {
+    return -3;
+  }
+
+  // take samples and find bias
+  _gxbD = 0;
+  _gybD = 0;
+  _gzbD = 0;
+  for (size_t i=0; i < _numSamples; i++) {
+    readSensor();
+    _gxbD += (getGyroX_rads() + _gxb)/((double)_numSamples);
+    _gybD += (getGyroY_rads() + _gyb)/((double)_numSamples);
+    _gzbD += (getGyroZ_rads() + _gzb)/((double)_numSamples);
+    delay(20);
+  }
+  _gxb = (float)_gxbD;
+  _gyb = (float)_gybD;
+  _gzb = (float)_gzbD;
+
+  // set the range, bandwidth, and srd back to what they were
+  if (setGyroRange(_gyroRange) < 0) {
+    return -4;
+  }
+  if (setDlpfBandwidth(_bandwidth) < 0) {
+    return -5;
+  }
+  if (setSrd(_srd) < 0) {
+    return -6;
+  }
+  return 1;
+}
+
+/* returns the gyro bias in the X direction, rad/s */
+float MPU9250::getGyroBiasX_rads() {
+  return _gxb;
+}
+
+/* returns the gyro bias in the Y direction, rad/s */
+float MPU9250::getGyroBiasY_rads() {
+  return _gyb;
+}
+
+/* returns the gyro bias in the Z direction, rad/s */
+float MPU9250::getGyroBiasZ_rads() {
+  return _gzb;
+}
+
+/* sets the gyro bias in the X direction to bias, rad/s */
+void MPU9250::setGyroBiasX_rads(float bias) {
+  _gxb = bias;
+}
+
+/* sets the gyro bias in the Y direction to bias, rad/s */
+void MPU9250::setGyroBiasY_rads(float bias) {
+  _gyb = bias;
+}
+
+/* sets the gyro bias in the Z direction to bias, rad/s */
+void MPU9250::setGyroBiasZ_rads(float bias) {
+  _gzb = bias;
+}
+
+/* finds bias and scale factor calibration for the accelerometer,
+this should be run for each axis in each direction (6 total) to find
+the min and max values along each */
+int MPU9250::calibrateAccel() {
+  // set the range, bandwidth, and srd
+  if (setAccelRange(ACCEL_RANGE_2G) < 0) {
+    return -1;
+  }
+  if (setDlpfBandwidth(DLPF_BANDWIDTH_20HZ) < 0) {
+    return -2;
+  }
+  if (setSrd(19) < 0) {
+    return -3;
+  }
+
+  // take samples and find min / max 
+  _axbD = 0;
+  _aybD = 0;
+  _azbD = 0;
+  for (size_t i=0; i < _numSamples; i++) {
+    readSensor();
+    _axbD += (getAccelX_mss()/_axs + _axb)/((double)_numSamples);
+    _aybD += (getAccelY_mss()/_ays + _ayb)/((double)_numSamples);
+    _azbD += (getAccelZ_mss()/_azs + _azb)/((double)_numSamples);
+    delay(20);
+  }
+  if (_axbD > 9.0f) {
+    _axmax = (float)_axbD;
+  }
+  if (_aybD > 9.0f) {
+    _aymax = (float)_aybD;
+  }
+  if (_azbD > 9.0f) {
+    _azmax = (float)_azbD;
+  }
+  if (_axbD < -9.0f) {
+    _axmin = (float)_axbD;
+  }
+  if (_aybD < -9.0f) {
+    _aymin = (float)_aybD;
+  }
+  if (_azbD < -9.0f) {
+    _azmin = (float)_azbD;
+  }
+
+  // find bias and scale factor
+  if ((abs(_axmin) > 9.0f) && (abs(_axmax) > 9.0f)) {
+    _axb = (_axmin + _axmax) / 2.0f;
+    _axs = G/((abs(_axmin) + abs(_axmax)) / 2.0f);
+  }
+  if ((abs(_aymin) > 9.0f) && (abs(_aymax) > 9.0f)) {
+    _ayb = (_axmin + _axmax) / 2.0f;
+    _ays = G/((abs(_aymin) + abs(_aymax)) / 2.0f);
+  }
+  if ((abs(_azmin) > 9.0f) && (abs(_azmax) > 9.0f)) {
+    _azb = (_azmin + _azmax) / 2.0f;
+    _azs = G/((abs(_azmin) + abs(_azmax)) / 2.0f);
+  }
+
+  // set the range, bandwidth, and srd back to what they were
+  if (setAccelRange(_accelRange) < 0) {
+    return -4;
+  }
+  if (setDlpfBandwidth(_bandwidth) < 0) {
+    return -5;
+  }
+  if (setSrd(_srd) < 0) {
+    return -6;
+  }
+  return 1;  
+}
+
+/* returns the accelerometer bias in the X direction, m/s/s */
+float MPU9250::getAccelBiasX_mss() {
+  return _axb;
+}
+
+/* returns the accelerometer scale factor in the X direction */
+float MPU9250::getAccelScaleFactorX() {
+  return _axs;
+}
+
+/* returns the accelerometer bias in the Y direction, m/s/s */
+float MPU9250::getAccelBiasY_mss() {
+  return _ayb;
+}
+
+/* returns the accelerometer scale factor in the Y direction */
+float MPU9250::getAccelScaleFactorY() {
+  return _ays;
+}
+
+/* returns the accelerometer bias in the Z direction, m/s/s */
+float MPU9250::getAccelBiasZ_mss() {
+  return _azb;
+}
+
+/* returns the accelerometer scale factor in the Z direction */
+float MPU9250::getAccelScaleFactorZ() {
+  return _azs;
+}
+
+/* sets the accelerometer bias (m/s/s) and scale factor in the X direction */
+void MPU9250::setAccelCalX(float bias,float scaleFactor) {
+  _axb = bias;
+  _axs = scaleFactor;
+}
+
+/* sets the accelerometer bias (m/s/s) and scale factor in the Y direction */
+void MPU9250::setAccelCalY(float bias,float scaleFactor) {
+  _ayb = bias;
+  _ays = scaleFactor;
+}
+
+/* sets the accelerometer bias (m/s/s) and scale factor in the Z direction */
+void MPU9250::setAccelCalZ(float bias,float scaleFactor) {
+  _azb = bias;
+  _azs = scaleFactor;
+}
+
+/* finds bias and scale factor calibration for the magnetometer,
+the sensor should be rotated in a figure 8 motion until complete */
+int MPU9250::calibrateMag() {
+  // set the srd
+  if (setSrd(19) < 0) {
+    return -1;
+  }
+
+  // get a starting set of data
+  readSensor();
+  _hxmax = getMagX_uT();
+  _hxmin = getMagX_uT();
+  _hymax = getMagY_uT();
+  _hymin = getMagY_uT();
+  _hzmax = getMagZ_uT();
+  _hzmin = getMagZ_uT();
+
+  // collect data to find max / min in each channel
+  _counter = 0;
+  while (_counter < _maxCounts) {
+    _delta = 0.0f;
+    _framedelta = 0.0f;
+    readSensor();
+    _hxfilt = (_hxfilt*((float)_coeff-1)+(getMagX_uT()/_hxs+_hxb))/((float)_coeff);
+    _hyfilt = (_hyfilt*((float)_coeff-1)+(getMagY_uT()/_hys+_hyb))/((float)_coeff);
+    _hzfilt = (_hzfilt*((float)_coeff-1)+(getMagZ_uT()/_hzs+_hzb))/((float)_coeff);
+    if (_hxfilt > _hxmax) {
+      _delta = _hxfilt - _hxmax;
+      _hxmax = _hxfilt;
+    }
+    if (_delta > _framedelta) {
+      _framedelta = _delta;
+    }
+    if (_hyfilt > _hymax) {
+      _delta = _hyfilt - _hymax;
+      _hymax = _hyfilt;
+    }
+    if (_delta > _framedelta) {
+      _framedelta = _delta;
+    }
+    if (_hzfilt > _hzmax) {
+      _delta = _hzfilt - _hzmax;
+      _hzmax = _hzfilt;
+    }
+    if (_delta > _framedelta) {
+      _framedelta = _delta;
+    }
+    if (_hxfilt < _hxmin) {
+      _delta = abs(_hxfilt - _hxmin);
+      _hxmin = _hxfilt;
+    }
+    if (_delta > _framedelta) {
+      _framedelta = _delta;
+    }
+    if (_hyfilt < _hymin) {
+      _delta = abs(_hyfilt - _hymin);
+      _hymin = _hyfilt;
+    }
+    if (_delta > _framedelta) {
+      _framedelta = _delta;
+    }
+    if (_hzfilt < _hzmin) {
+      _delta = abs(_hzfilt - _hzmin);
+      _hzmin = _hzfilt;
+    }
+    if (_delta > _framedelta) {
+      _framedelta = _delta;
+    }
+    if (_framedelta > _deltaThresh) {
+      _counter = 0;
+    } else {
+      _counter++;
+    }
+    delay(20);
+  }
+
+  // find the magnetometer bias
+  _hxb = (_hxmax + _hxmin) / 2.0f;
+  _hyb = (_hymax + _hymin) / 2.0f;
+  _hzb = (_hzmax + _hzmin) / 2.0f;
+
+  // find the magnetometer scale factor
+  _hxs = (_hxmax - _hxmin) / 2.0f;
+  _hys = (_hymax - _hymin) / 2.0f;
+  _hzs = (_hzmax - _hzmin) / 2.0f;
+  _avgs = (_hxs + _hys + _hzs) / 3.0f;
+  _hxs = _avgs/_hxs;
+  _hys = _avgs/_hys;
+  _hzs = _avgs/_hzs;
+
+  // set the srd back to what it was
+  if (setSrd(_srd) < 0) {
+    return -2;
+  }
+  return 1;
+}
+
+/* returns the magnetometer bias in the X direction, uT */
+float MPU9250::getMagBiasX_uT() {
+  return _hxb;
+}
+
+/* returns the magnetometer scale factor in the X direction */
+float MPU9250::getMagScaleFactorX() {
+  return _hxs;
+}
+
+/* returns the magnetometer bias in the Y direction, uT */
+float MPU9250::getMagBiasY_uT() {
+  return _hyb;
+}
+
+/* returns the magnetometer scale factor in the Y direction */
+float MPU9250::getMagScaleFactorY() {
+  return _hys;
+}
+
+/* returns the magnetometer bias in the Z direction, uT */
+float MPU9250::getMagBiasZ_uT() {
+  return _hzb;
+}
+
+/* returns the magnetometer scale factor in the Z direction */
+float MPU9250::getMagScaleFactorZ() {
+  return _hzs;
+}
+
+/* sets the magnetometer bias (uT) and scale factor in the X direction */
+void MPU9250::setMagCalX(float bias,float scaleFactor) {
+  _hxb = bias;
+  _hxs = scaleFactor;
+}
+
+/* sets the magnetometer bias (uT) and scale factor in the Y direction */
+void MPU9250::setMagCalY(float bias,float scaleFactor) {
+  _hyb = bias;
+  _hys = scaleFactor;
+}
+
+/* sets the magnetometer bias (uT) and scale factor in the Z direction */
+void MPU9250::setMagCalZ(float bias,float scaleFactor) {
+  _hzb = bias;
+  _hzs = scaleFactor;
+}
+
+/* writes a byte to MPU9250 register given a register address and data */
+int MPU9250::writeRegister(uint8_t subAddress, uint8_t data){
+  /* write data to device */
+  if( _useSPI ){
+    _spi->beginTransaction(SPISettings(SPI_LS_CLOCK, MSBFIRST, SPI_MODE3)); // begin the transaction
+    digitalWrite(_csPin,LOW); // select the MPU9250 chip
+    _spi->transfer(subAddress); // write the register address
+    _spi->transfer(data); // write the data
+    digitalWrite(_csPin,HIGH); // deselect the MPU9250 chip
+    _spi->endTransaction(); // end the transaction
+  }
+  else{
+    _i2c->writeByte(_address, subAddress, data);
+  }
+
+  delay(10);
+  
+  /* read back the register */
+  readRegisters(subAddress,1,_buffer);
+  /* check the read back register against the written register */
+  if(_buffer[0] == data) {
+    return 1;
+  }
+  else{
+    return -1;
+  }
+}
+
+/* reads registers from MPU9250 given a starting register address, number of bytes, and a pointer to store data */
+int MPU9250::readRegisters(uint8_t subAddress, uint8_t count, uint8_t* dest){
+  if( _useSPI ){
+    // begin the transaction
+    if(_useSPIHS){
+      _spi->beginTransaction(SPISettings(SPI_HS_CLOCK, MSBFIRST, SPI_MODE3));
+    }
+    else{
+      _spi->beginTransaction(SPISettings(SPI_LS_CLOCK, MSBFIRST, SPI_MODE3));
+    }
+    digitalWrite(_csPin,LOW); // select the MPU9250 chip
+    _spi->transfer(subAddress | SPI_READ); // specify the starting register address
+    for(uint8_t i = 0; i < count; i++){
+      dest[i] = _spi->transfer(0x00); // read the data
+    }
+    digitalWrite(_csPin,HIGH); // deselect the MPU9250 chip
+    _spi->endTransaction(); // end the transaction
+    return 1;
+  }
+  else{
+    
+    if(ESP_OK == _i2c->readBytes(_address, subAddress, count, dest))
+    {
+      return 1;
+    }
+    else
+    {
+      return -1;
+    }
+  }
+}
+
+/* writes a register to the AK8963 given a register address and data */
+int MPU9250::writeAK8963Register(uint8_t subAddress, uint8_t data){
+  // set slave 0 to the AK8963 and set for write
+	if (writeRegister(I2C_SLV0_ADDR,AK8963_I2C_ADDR) < 0) {
+    return -1;
+  }
+  // set the register to the desired AK8963 sub address 
+	if (writeRegister(I2C_SLV0_REG,subAddress) < 0) {
+    return -2;
+  }
+  // store the data for write
+	if (writeRegister(I2C_SLV0_DO,data) < 0) {
+    return -3;
+  }
+  // enable I2C and send 1 byte
+	if (writeRegister(I2C_SLV0_CTRL,I2C_SLV0_EN | (uint8_t)1) < 0) {
+    return -4;
+  }
+	// read the register and confirm
+	if (readAK8963Registers(subAddress,1,_buffer) < 0) {
+    return -5;
+  }
+	if(_buffer[0] == data) {
+  	return 1;
+  } else{
+  	return -6;
+  }
+}
+
+/* reads registers from the AK8963 */
+int MPU9250::readAK8963Registers(uint8_t subAddress, uint8_t count, uint8_t* dest){
+  // set slave 0 to the AK8963 and set for read
+	if (writeRegister(I2C_SLV0_ADDR,AK8963_I2C_ADDR | I2C_READ_FLAG) < 0) {
+    return -1;
+  }
+  // set the register to the desired AK8963 sub address
+	if (writeRegister(I2C_SLV0_REG,subAddress) < 0) {
+    return -2;
+  }
+  // enable I2C and request the bytes
+	if (writeRegister(I2C_SLV0_CTRL,I2C_SLV0_EN | count) < 0) {
+    return -3;
+  }
+	delay(1); // takes some time for these registers to fill
+  // read the bytes off the MPU9250 EXT_SENS_DATA registers
+	_status = readRegisters(EXT_SENS_DATA_00,count,dest); 
+  return _status;
+}
+
+/* gets the MPU9250 WHO_AM_I register value, expected to be 0x71 */
+int MPU9250::whoAmI(){
+  // read the WHO AM I register
+  if (readRegisters(WHO_AM_I,1,_buffer) < 0) {
+    return -1;
+  }
+  // return the register value
+  return _buffer[0];
+}
+
+/* gets the AK8963 WHO_AM_I register value, expected to be 0x48 */
+int MPU9250::whoAmIAK8963(){
+  // read the WHO AM I register
+  if (readAK8963Registers(AK8963_WHO_AM_I,1,_buffer) < 0) {
+    return -1;
+  }
+  // return the register value
+  return _buffer[0];
 }

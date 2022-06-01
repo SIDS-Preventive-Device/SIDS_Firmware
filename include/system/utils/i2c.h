@@ -1,9 +1,8 @@
 #if !defined(__CODE_GRAV_SYSTEM_UTILS_I2C_H__)
 #define __CODE_GRAV_SYSTEM_UTILS_I2C_H__
 
-#include <Wire.h>
+#include <I2Cdev.h>
 
-extern bool isI2CDeviceConnected(TwoWire &bus, uint8_t address);
-extern void DumpI2Cdevices(TwoWire &bus);
+extern void DumpI2Cdevices(i2cbus::I2C &bus);
 
 #endif // __CODE_GRAV_SYSTEM_UTILS_I2C_H__

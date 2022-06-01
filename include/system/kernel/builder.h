@@ -3,6 +3,7 @@
 
 #include "core.h"
 #include "system/modules/logger.h"
+#include <I2Cdev.h>
 
 class SystemBuilder {
     SystemConfig_t config;
@@ -13,7 +14,7 @@ public:
 
     SystemBuilder &setLogLevel(eLogLevel_t level);
 
-    SystemBuilder &setI2Cport(TwoWire &bus);
+    SystemBuilder &setI2Cport(i2cbus::I2C &bus);
 
     SystemBuilder &enableBLE(const __FlashStringHelper* bleDeviceName);
 

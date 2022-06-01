@@ -83,18 +83,18 @@ public:
             },
             .arg = self,
             .dispatch_method = ESP_TIMER_TASK,
-            .name = "CalibrationUpdate"
+            .name = "CalibCallback"
         };
 
-        logger << LOG_INFO << F("Measuring for ") << config.measuringTimeS << F("s") << EndLine;
-
         if (this->config.preMeasures) {
+            logger << LOG_INFO << F("Pre measures Callback") << EndLine;
             this->config.preMeasures(this->config.pContext);
         }
 
         esp_timer_create (&updateSensorTimerConfig, &updateSensorsTimer_h);
         esp_timer_start_once (updateSensorsTimer_h, config.measuringTimeS * 1000000UL);
 
+        logger << LOG_INFO << F("Measuring for ") << config.measuringTimeS << F("s") << EndLine;
         while (xTaskNotifyWait(0, 0, NULL, 0) != pdPASS) {
             xLastWakeTime = xTaskGetTickCount();
             vTaskDelayUntil( &xLastWakeTime, pdMS_TO_TICKS(config.measureIntervalMs));
@@ -106,6 +106,7 @@ public:
         esp_timer_delete(updateSensorsTimer_h);
 
         if (this->config.postMeasures) {
+            logger << LOG_INFO << F("Post measures Callback") << EndLine;
             this->config.postMeasures(this->config.pContext);
         }
 

@@ -6,19 +6,18 @@
 #include "calls.h"
 #include "system/modules/logger.h"
 #include "system/utils/isensor.h"
-#include <WString.h>
+#include "I2Cdev.h"
 
-class TwoWire;
 class HardwareSerial;
 
-#define KERNEL_VERSION F("0.3.0")
+#define KERNEL_VERSION F("0.4.0")
 
 typedef struct {
     uint32_t        baudrate;
     eLogLevel_t     logLevel;
     HardwareSerial* serialPort;
 
-    TwoWire*        i2cBus;
+    i2cbus::I2C*    i2cBus;
 
     const __FlashStringHelper* bleDeviceName;
 

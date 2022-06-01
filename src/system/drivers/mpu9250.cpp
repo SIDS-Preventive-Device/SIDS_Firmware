@@ -5,16 +5,19 @@
 #include "system/utils/i2c.h"
 #include "system/kernel/core.h"
 
-#define __SENSOR_ADDRESS MPU9250_DEFAULT_ADDRESS
+#define __SENSOR_ADDRESS 0x68
 
 SensorMPU9250::SensorMPU9250()
-    : device(__SENSOR_ADDRESS), firstReadDone(false)
+    : device(i2c0, __SENSOR_ADDRESS), firstReadDone(false)
 {
 }
 
 bool SensorMPU9250::init() {
     logger << LOG_DEBUG << F("Initializing Sensor MPU9250") << EndLine;
-    this->device.initialize();
+    this->device.begin();
+    this->device.setAccelRange(MPU9250::ACCEL_RANGE_2G);
+    this->device.setGyroRange(MPU9250::GYRO_RANGE_250DPS);
+    this->device.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_41HZ);
     logger << LOG_DEBUG << F("Testing connection... ");
     this->checkState();
     switch (this->state)
@@ -37,34 +40,25 @@ bool SensorMPU9250::init() {
 
 SensorState_e SensorMPU9250::checkState () {
     this->state = SENSOR_OK;
-    if (!isI2CDeviceConnected(*OsKernel::OsGetSysConfigPtr()->i2cBus, __SENSOR_ADDRESS)) {
+    if (OsKernel::OsGetSysConfigPtr()->i2cBus->testConnection(__SENSOR_ADDRESS)) {
         this->state = SENSOR_NOT_FOUND;
     }
-    if (!this->device.testConnection()) {
-        this->state = SENSOR_ERROR_ON_CONNECT;
-    }
-
     return this->state;
 }
 
 bool SensorMPU9250::update() {
     if (!this->firstReadDone) { this->firstReadDone = true; }
 
-    Vector3D_t *pAcceleration = &this->acc;
-    Vector3D_t *pGiroscope = &this->giro;
-    Vector3D_t *pMagnetometer = &this->mag;
-
-    this->device.getMotion9(
-        &pAcceleration->x,
-        &pAcceleration->y,
-        &pAcceleration->z,
-        &pGiroscope->x,
-        &pGiroscope->y,
-        &pGiroscope->z,
-        &pMagnetometer->x,
-        &pMagnetometer->y,
-        &pMagnetometer->z
-    );
+    this->device.readSensor();
+    this->acc.x  = this->device.getAccelX_mss();
+    this->acc.y  = this->device.getAccelY_mss();
+    this->acc.z  = this->device.getAccelZ_mss();
+    this->giro.x = this->device.getGyroX_rads();
+    this->giro.y = this->device.getGyroX_rads();
+    this->giro.z = this->device.getGyroX_rads();
+    this->mag.x  = this->device.getMagX_uT();
+    this->mag.y  = this->device.getMagX_uT();
+    this->mag.z  = this->device.getMagX_uT();
 
     return true;
 }

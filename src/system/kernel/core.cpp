@@ -90,7 +90,11 @@ bool OsKernel::OsSetBootMode()
     logger << LOG_MASTER << F("Press a key to boot as calibration...") << EndLine;
 
     bool bootAsCalibration = wait([](void *pSerialPort) -> bool {
-        return ((HardwareSerial*)pSerialPort)->available() > 0;
+        HardwareSerial* serial = ((HardwareSerial*)pSerialPort);
+        if (serial) {
+            return serial->available() > 0;
+        }
+        return false;
     }, configuration.serialPort, 3000UL, &logger, '.');
 
     if (bootAsCalibration) {
@@ -113,7 +117,7 @@ bool OsKernel::OsInitBuses()
     }
 
     if (configuration.i2cBus != nullptr) {
-        configuration.i2cBus->begin(-1, -1, 400000L);
+        configuration.i2cBus->begin(GPIO_NUM_21, GPIO_NUM_22, 100000UL);
     } else {
         LogKernelError ("I2C Bus instance is NULL!!!");
         return false;
@@ -213,7 +217,7 @@ bool OsKernel::OsInitTasks()
             assert(false);
             vTaskDelete(NULL);
         },
-        "CodeGrav_Kernel", 0x4000, NULL, 1, &systemMainTask_h, 1
+        "CodeGrav_Kernel", 0x8000, NULL, 1, &systemMainTask_h, 1
     );
 
     return true;
