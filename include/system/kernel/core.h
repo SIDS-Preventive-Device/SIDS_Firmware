@@ -11,7 +11,7 @@
 class TwoWire;
 class HardwareSerial;
 
-#define KERNEL_VERSION F("0.2.10")
+#define KERNEL_VERSION F("0.3.0")
 
 typedef struct {
     uint32_t        baudrate;
