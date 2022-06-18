@@ -4,6 +4,24 @@
 #include "system/kernel/ble.h"
 
 static MahonyFilter mahony;
+  
+//Offsets obtenidos para el acelerometro y su matriz de corrección, donde solo hacemos uso de los valores en la diagonal.
+float A_B[3]  {  150.42,   94.82, -725.65};
+
+float A_Ainv[3][3]  {
+  {  0.06220, -0.00141, -0.00018},
+  { -0.00141,  0.06138, -0.00048},
+  { -0.00018, -0.00048,  0.05994}
+};
+
+// Offsets obtenidos para el magnetometro y su matriz de corrección, donde solo hacemos uso de los valores en la diagonal.
+float M_B[3]  {    6.36,   25.27,  -69.48};
+
+float M_Ainv[3][3] {
+  {  1.75453, -0.09176,  0.03732},
+  { -0.09176,  1.85748,  0.09509},
+  {  0.03732,  0.09509,  1.94828}
+};
 
 QuaternionMatrix_t CalculateOrientation(OrientationData_t& orientationData, OrientationParams_t params)
 {
@@ -14,7 +32,7 @@ QuaternionMatrix_t CalculateOrientation(OrientationData_t& orientationData, Orie
     //
     Matrix<3, 1, float> vGiro = (orientationData.rotation.toMatrix() - params.giroscopeOffsets) * params.giroScale;
     Matrix<3, 1, float> vAcc = orientationData.acceleration.toMatrix() - params.accelerometerOffsets;
-    Matrix<3, 1, float> vMag = orientationData.acceleration.toMatrix() - params.accelerometerOffsets;
+    Matrix<3, 1, float> vMag = orientationData.magnetometer.toMatrix() - params.accelerometerOffsets;
 
 
     //Los ejes estan invertidos por las siguientes razones:
@@ -25,7 +43,9 @@ QuaternionMatrix_t CalculateOrientation(OrientationData_t& orientationData, Orie
 
     mahony.getQuaternion(result.getInternalArrayPtr());
 
-    OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, result.toString());
+    char buffer[32];
+    sprintf(buffer, "%f %f %f", result[0][0], result[1][0], result[2][0], result[3][0]);
+    OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, buffer);
 
     return result;
 }

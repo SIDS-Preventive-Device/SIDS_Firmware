@@ -180,6 +180,7 @@ bool OsKernel::OsInitSensors()
         logger << LOG_WARN << F("Risk alert provider is not defined, disabling alerts!") << EndLine;
     } else {
         configuration.riskAlert->Configure();
+        logger << LOG_INFO << F("Sending a test alert of 1 second") << EndLine;
         configuration.riskAlert->Alert(1000);
     }
 
