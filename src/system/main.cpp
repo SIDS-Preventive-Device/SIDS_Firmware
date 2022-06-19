@@ -19,7 +19,7 @@
 #define INTERVAL_DEBUG 500
 #define INTERVAL_PRODUCTION 100
 
-#define MEASURE_INTERVAL 70
+#define MEASURE_INTERVAL INTERVAL_PRODUCTION
 #define POST_ALERT_WAIT  1000
 
 #define RISK_THRESHOLD 0
@@ -42,11 +42,11 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
     };
 
     while (true) {
-        // //
-        // // Update orientation sensor
-        // //
-        // OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
-        
+        //
+        // Update orientation sensor
+        //
+        OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
+
         //
         // Calculate quaternion values from orientation sensor using the parameters defined.
         //
@@ -66,7 +66,6 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
             //
             OsKernel::OsCall(OS_SERVICE_THROW_POSITION_RISK_ALERT, NULL);
             vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(POST_ALERT_WAIT));
-            OsKernel::SetBLECharacteristicValue(BLE_CHT_ALERT, 0);
             continue;
         }
 
@@ -74,6 +73,8 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
         // Update temperature
         //
         OsKernel::OsCall(OS_SERVICE_UPDATE_TEMPERATURE, NULL);
+
+        vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(MEASURE_INTERVAL));
     }
 }
 

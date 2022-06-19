@@ -181,7 +181,7 @@ bool OsKernel::OsInitSensors()
     } else {
         configuration.riskAlert->Configure();
         logger << LOG_INFO << F("Sending a test alert of 1 second") << EndLine;
-        configuration.riskAlert->Alert(1000);
+        configuration.riskAlert->Alert(500);
     }
 
     if (configuration.batterySensor && esp_timer_create(&readBatteryTimer, &readBatteryTimer_h) != ESP_OK) {

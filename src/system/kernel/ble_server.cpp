@@ -142,6 +142,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, void* 
     CharacteristicsTable[cht].Characteristic->setValue((uint8_t*)data, len);
     if (CharacteristicsTable[cht].Props & BLECharacteristic::PROPERTY_NOTIFY) {
         CharacteristicsTable[cht].Characteristic->notify();
+        delay(5);
     }
 }
 

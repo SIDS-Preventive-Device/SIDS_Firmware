@@ -6,28 +6,28 @@
 
 static MahonyFilter mahony;
 
-#define gscale (250.0 / 32768.0) * (PI / 180.0)  // gyro default 250 LSB per d/s -> rad/s
+#define gscale (250.0 / 32768.0) * (PI / 180.0) // gyro default 250 LSB per d/s -> rad/s
 
 // Descomentar la siguiente linea para imprimir en formato de quaterniones en lugar de angulos navales.
 //#define QUATERNIONS 1
 
 // Offsets obtenidos para el acelerometro y su matriz de corrección, donde solo hacemos uso de los valores en la diagonal.
-float A_B[3]{150.42, 94.82, -725.65};
+float A_B[3]{86.16, -74.97, -450.39};
 
 float A_Ainv[3][3]{
-    {0.06220, -0.00141, -0.00018},
-    {-0.00141, 0.06138, -0.00048},
-    {-0.00018, -0.00048, 0.05994}};
+    {0.06144, 0.00177, -0.00034},
+    {0.00177, 0.06036, -0.00081},
+    {-0.00034, -0.00081, 0.05985}};
 
 // Offsets obtenidos para el magnetometro y su matriz de corrección, donde solo hacemos uso de los valores en la diagonal.
-float M_B[3]{6.36, 25.27, -69.48};
+float M_B[3]{29.61, 37.55, -312.00};
 
 float M_Ainv[3][3]{
-    {1.75453, -0.09176, 0.03732},
-    {-0.09176, 1.85748, 0.09509},
-    {0.03732, 0.09509, 1.94828}};
+    {0.48370, -0.00397, -0.00072},
+    {-0.00397, 0.48879, -0.00555},
+    {-0.00072, -0.00555, 0.47706}};
 
-float G_off[3] = {-42.3, -2.1, 23.6};  // raw offsets, determined for gyro at rest
+float G_off[3] = {-145.8, -145.8, -145.8}; // raw offsets, determined for gyro at rest
 
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
@@ -39,7 +39,7 @@ float Mxyz[3];
 unsigned long now = 0, last = 0;
 float dT = 0;
 unsigned long now_ms, last_ms = 0;
-unsigned long print_ms = 70;  // Cada cuanto queremos imprimir las mediciones.
+unsigned long print_ms = 70; // Cada cuanto queremos imprimir las mediciones.
 
 bool initial = true;
 float initialYaw;
@@ -48,9 +48,9 @@ int count = 0;
 float vectorDot(float a[3], float b[3]);
 void vectorNormalize(float a[3]);
 
-EulerMatrix_t CalculateOrientation(OrientationData_t& orientationData, OrientationParams_t params)
+EulerMatrix_t CalculateOrientation(OrientationData_t &orientationData, OrientationParams_t params)
 {
-    static unsigned long Last = 0;
+    char buffer[64];
     EulerMatrix_t result;
     float temp[3];
     float vGiro[3];
@@ -61,18 +61,15 @@ EulerMatrix_t CalculateOrientation(OrientationData_t& orientationData, Orientati
     float rollPitchYaw[3];
     float q[4];
 
-    SensorMPU9250* MPU = (SensorMPU9250*)OsKernel::OsGetSysConfigPtr()->orientationSensor;
-    MPU9250* device = &MPU->device;
-    device->readSensor();
-    int16_t ax = device->getAccelX_mss();
-    int16_t ay = device->getAccelY_mss();
-    int16_t az = device->getAccelZ_mss();
-    int16_t gx = device->getGyroX_rads();
-    int16_t gy = device->getGyroX_rads();
-    int16_t gz = device->getGyroX_rads();
-    int16_t mx = device->getMagX_uT();
-    int16_t my = device->getMagY_uT();
-    int16_t mz = device->getMagZ_uT();
+    int16_t ax = orientationData.acceleration.x;
+    int16_t ay = orientationData.acceleration.y;
+    int16_t az = orientationData.acceleration.z;
+    int16_t gx = orientationData.rotation.x;
+    int16_t gy = orientationData.rotation.y;
+    int16_t gz = orientationData.rotation.z;
+    int16_t mx = orientationData.magnetometer.x;
+    int16_t my = orientationData.magnetometer.y;
+    int16_t mz = orientationData.magnetometer.z;
 
     // printf("%d %d %d\n%d %d %d\n%d %d %d\n", gx, gy, gz, ax, ay, az, mx, my, mz);
 
@@ -84,7 +81,8 @@ EulerMatrix_t CalculateOrientation(OrientationData_t& orientationData, Orientati
     Axyz[1] = (float)ay;
     Axyz[2] = (float)az;
     // Se aplican los offsets y factores de escala obtenidos de magneto
-    for (int i = 0; i < 3; i++) temp[i] = (Axyz[i] - A_B[i]);
+    for (int i = 0; i < 3; i++)
+        temp[i] = (Axyz[i] - A_B[i]);
     Axyz[0] = A_Ainv[0][0] * temp[0] + A_Ainv[0][1] * temp[1] + A_Ainv[0][2] * temp[2];
     Axyz[1] = A_Ainv[1][0] * temp[0] + A_Ainv[1][1] * temp[1] + A_Ainv[1][2] * temp[2];
     Axyz[2] = A_Ainv[2][0] * temp[0] + A_Ainv[2][1] * temp[1] + A_Ainv[2][2] * temp[2];
@@ -95,14 +93,15 @@ EulerMatrix_t CalculateOrientation(OrientationData_t& orientationData, Orientati
     Mxyz[2] = (float)mz;
 
     // Se aplican los offsets y factores de escala obtenidos de magneto
-    for (int i = 0; i < 3; i++) temp[i] = (Mxyz[i] - M_B[i]);
+    for (int i = 0; i < 3; i++)
+        temp[i] = (Mxyz[i] - M_B[i]);
     Mxyz[0] = M_Ainv[0][0] * temp[0] + M_Ainv[0][1] * temp[1] + M_Ainv[0][2] * temp[2];
     Mxyz[1] = M_Ainv[1][0] * temp[0] + M_Ainv[1][1] * temp[1] + M_Ainv[1][2] * temp[2];
     Mxyz[2] = M_Ainv[2][0] * temp[0] + M_Ainv[2][1] * temp[1] + M_Ainv[2][2] * temp[2];
     vectorNormalize(Mxyz);
 
     now = micros();
-    dT = (now - last) * 1.0e-6;  // Tiempo que ha pasado desde la última medición
+    dT = (now - last) * 1.0e-6; // Tiempo que ha pasado desde la última medición
     last = now;
 
     // Los ejes estan invertidos por las siguientes razones:
@@ -110,6 +109,7 @@ EulerMatrix_t CalculateOrientation(OrientationData_t& orientationData, Orientati
     //* 2.- Los ejes x & y del magnetometro estan invertidos con respecto al acelerometro y magnetometro
     mahony.MahonyQuaternionUpdate(Axyz[1], Axyz[0], Axyz[2], Gxyz[1], Gxyz[0], Gxyz[2],
                                   Mxyz[0], Mxyz[1], -Mxyz[2], dT);
+    // mahony.MahonyQuaternionUpdate(Axyz[1], Axyz[0], Axyz[2], Gxyz[1], Gxyz[0], Gxyz[2], dT);
 
     //*Obtenemos los valores de los angulos
     mahony.getRollPitchYaw(rollPitchYaw);
@@ -126,20 +126,10 @@ EulerMatrix_t CalculateOrientation(OrientationData_t& orientationData, Orientati
     if (rollPitchYaw[2] > 360.0)
         rollPitchYaw[2] -= 360.0;
 
-    now_ms = millis();  // Obtenemos cuanto tiempo ha pasado y comparamos, si es igual o mayor a los 70ms establecidos, es momento de imprimir.
-    if (now_ms - last_ms >= print_ms)
-    {
-        last_ms = now_ms;
-        count++;
-
-        // Impresión de la salida en formato de grados de navegación
-        //  Serial.println(initialYaw);
-
-        char buffer[64];
-        sprintf(buffer, "%f %f %f", rollPitchYaw[2], rollPitchYaw[1], rollPitchYaw[0]);
-        OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, buffer);
-        logger << "Orientation: " <<  buffer << "\n";
-    }
+    memset(buffer, 0, 64);
+    sprintf(buffer, "%.2f %.2f %.2f", rollPitchYaw[0], rollPitchYaw[1], rollPitchYaw[2]);
+    OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, buffer);
+    logger << "Orientation: " << buffer << "\n";
 
     return result;
 }
@@ -238,12 +228,12 @@ void MahonyFilter::MahonyQuaternionUpdate(float ax, float ay, float az, float gx
     this->q[3] = q4 * norm;
 }
 
-int MahonyFilter::getRollPitchYaw(float* navigationAngles)
+int MahonyFilter::getRollPitchYaw(float *navigationAngles)
 {
     //*Formulas sacadas de aquí: http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles, no hay que olvidar que en este tipo de representación,
     //*los angulos no son conmutativos, una rotación afecta a la otra, en este caso, un pitch >= +-90, puede afectar al yaw.
 
-    navigationAngles[0] = -atan2((this->q[0] * this->q[1] + this->q[2] * this->q[3]), 0.5f - (this->q[1] * this->q[1] + this->q[2] * this->q[2]));
+    navigationAngles[0] = atan2((this->q[0] * this->q[1] + this->q[2] * this->q[3]), 0.5f - (this->q[1] * this->q[1] + this->q[2] * this->q[2]));
     navigationAngles[1] = asin(2.0f * (this->q[0] * this->q[2] - this->q[1] * this->q[3]));
     navigationAngles[2] = atan2((this->q[1] * this->q[2] + this->q[0] * this->q[3]), 0.5f - (this->q[2] * this->q[2] + this->q[3] * this->q[3]));
     return 0;
@@ -256,7 +246,7 @@ EulerMatrix_t MahonyFilter::getRollPitchYawMatrix()
     return output;
 }
 
-int MahonyFilter::getQuaternion(float* quaternion)
+int MahonyFilter::getQuaternion(float *quaternion)
 {
     quaternion[0] = this->q[0];
     quaternion[1] = this->q[1];
@@ -299,13 +289,15 @@ float MahonyFilter::getKI()
 {
     return this->KI;
 }
-float vectorDot(float a[3], float b[3]) {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+float vectorDot(float a[3], float b[3])
+{
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
-void vectorNormalize(float a[3]) {
-  float magnitude = sqrt(vectorDot(a, a));
-  a[0] /= magnitude;
-  a[1] /= magnitude;
-  a[2] /= magnitude;
+void vectorNormalize(float a[3])
+{
+    float magnitude = sqrt(vectorDot(a, a));
+    a[0] /= magnitude;
+    a[1] /= magnitude;
+    a[2] /= magnitude;
 }

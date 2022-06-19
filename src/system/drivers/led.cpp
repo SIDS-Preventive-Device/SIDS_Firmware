@@ -6,9 +6,11 @@ Led::Led (uint8_t pin)
     : pin (pin) {
     this->timerLedOffConfig = {
         .callback = [](void* pPinNumber) -> void {
-            digitalWrite(*((uint8_t*)pPinNumber), LOW);
+            uint8_t pin = *((uint8_t*)pPinNumber);
+            logger << LOG_INFO << F("Alert power down on pin ") << pin << EndLine;
+            digitalWrite(pin, LOW);
         },
-        .arg = &pin,
+        .arg = &(this->pin),
         .dispatch_method = ESP_TIMER_TASK,
         .name = "LedAlrtDown"
     };
