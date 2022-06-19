@@ -29,15 +29,17 @@ BLEService_t ServicesTable[BLE_SERV_DELIM] = {
     { POSITION_SERVICE_UUID,            "PositionService",          NULL },
     { TEMPERATURE_SERVICE_UUID,         "TemperatureService",       NULL },
     { BATTERY_SERVICE_UUID,             "BatteryService",           NULL },
-    { DEVICE_INFO_SERVICE_UUID,         "DeviceInfoService",        NULL }
+    { DEVICE_INFO_SERVICE_UUID,         "DeviceInfoService",        NULL },
+    { RISK_SERVICE_UUID,                "RiskService",              NULL }
 };
 
 BLECharacteristic_t CharacteristicsTable[BLE_CHT_DELIM] = {
-    { BLE_SERV_POSITION,            POSITION_CHARACTERISTIC_UUID,           new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ || BLECharacteristic::PROPERTY_NOTIFY        },
-    { BLE_SERV_BATTERY,             BATTERY_LEVEL_CHARACTERISTIC_UUID,      new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                              },
-    { BLE_SERV_TEMPERATURE,         TEMPERATURE_CHARACTERISTIC_UUID,        new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                              },
-    { BLE_SERV_DEVICE_INFO,         FIRMWARE_VERSION_CHARACTERISTIC_UUID,   new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                              },
-    { BLE_SERV_DEVICE_INFO,         STATUS_CODE_CHARACTERISTIC_UUID,        new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                              }
+    { BLE_SERV_POSITION,            POSITION_CHARACTERISTIC_UUID,           new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_INDICATE  },
+    { BLE_SERV_BATTERY,             BATTERY_LEVEL_CHARACTERISTIC_UUID,      new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                                                              },
+    { BLE_SERV_TEMPERATURE,         TEMPERATURE_CHARACTERISTIC_UUID,        new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                                                              },
+    { BLE_SERV_DEVICE_INFO,         FIRMWARE_VERSION_CHARACTERISTIC_UUID,   new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                                                              },
+    { BLE_SERV_DEVICE_INFO,         STATUS_CODE_CHARACTERISTIC_UUID,        new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                                                              },
+    { BLE_SERV_RISK,                ALERT_CHARACTERISTIC_UUID,              new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_INDICATE  }
 };
 
 void DumpCharacteristicsTable();
@@ -102,14 +104,16 @@ void DumpCharacteristicsTable() {
     size_t index = 0;
 
     logger << LOG_INFO << F("BLE Characteristics Services Status Table") << EndLine;
-    logger.printf("%20s | %40s | %13s | %20s\n", "Service", "UUID", "Init", "Value");
+    logger.printf("%20s | %40s | %13s | %20s | %s\n", "Service", "UUID", "Init", "Value", "Props");
     for (index = 0; index < characteristicsTableSize; index++) {
         pCharactConfig = &CharacteristicsTable[index];
-        logger.printf("%20s | %40s | %13s | %20s\n",
+        logger.printf("%20s | %40s | %13s | %20s | 0x%08s\n",
             ServicesTable[pCharactConfig->Service].Name,
             pCharactConfig->UUID,
             pCharactConfig->Characteristic == NULL ? "--" : "OK",
-            pCharactConfig->Characteristic == NULL ? "" : pCharactConfig->Characteristic->getValue().c_str());
+            pCharactConfig->Characteristic == NULL ? "" : pCharactConfig->Characteristic->getValue().c_str(),
+            String(pCharactConfig->Props, HEX).c_str()
+            );
     }
 }
 
@@ -150,6 +154,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, String
     CharacteristicsTable[cht].Characteristic->setValue(parameter.c_str());
     if (CharacteristicsTable[cht].Props & BLECharacteristic::PROPERTY_NOTIFY) {
         CharacteristicsTable[cht].Characteristic->notify();
+        delay(5);
     }
 }
 
@@ -162,6 +167,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint16
     CharacteristicsTable[cht].Characteristic->setValue(parameter);
     if (CharacteristicsTable[cht].Props & BLECharacteristic::PROPERTY_NOTIFY) {
         CharacteristicsTable[cht].Characteristic->notify();
+        delay(5);
     }
 }
 
@@ -174,6 +180,7 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, uint32
     CharacteristicsTable[cht].Characteristic->setValue(parameter);
     if (CharacteristicsTable[cht].Props & BLECharacteristic::PROPERTY_NOTIFY) {
         CharacteristicsTable[cht].Characteristic->notify();
+        delay(5);
     }
 }
 
@@ -186,5 +193,6 @@ void OsKernel::SetBLECharacteristicValue (KernelBleCharecteristics_e cht, int32_
     CharacteristicsTable[cht].Characteristic->setValue(parameter);
     if (CharacteristicsTable[cht].Props & BLECharacteristic::PROPERTY_NOTIFY) {
         CharacteristicsTable[cht].Characteristic->notify();
+        delay(5);
     }
 }

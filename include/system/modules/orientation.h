@@ -4,6 +4,9 @@
 #include "system/utils/matrix.h"
 #include "system/utils/types.h"
 
+typedef Matrix<4, 1, float> QuaternionMatrix_t;
+typedef Matrix<3, 1, float> EulerMatrix_t;
+
 #define KP_DEFAULT 32.500
 #define KI_DEFAULT 0.000
 
@@ -20,6 +23,9 @@ public:
     float getKP();
     float getKI();
 
+    QuaternionMatrix_t getQuaternionMatrix() const;
+    EulerMatrix_t getRollPitchYawMatrix();
+
 private:
     float KP = KP_DEFAULT;
     float KI = KI_DEFAULT;
@@ -29,21 +35,12 @@ private:
 
 typedef struct
 {
-    Matrix<3, 1, int16_t> giroscopeOffsets;
     float giroScale;
-
-    Matrix<3, 1, int16_t> accelerometerOffsets;
-    Matrix<3, 3, float> accelerometerCorrection;
-    Matrix<3, 1, int16_t> magnetometerOffsets;
-    Matrix<3, 3, float> magnetometerCorrection;
-
     uint32_t measureInterval;
 } OrientationParams_t;
 
-typedef Matrix<4, 1, float> QuaternionMatrix_t;
+extern EulerMatrix_t CalculateOrientation (OrientationData_t& orientationData, OrientationParams_t params);
 
-extern QuaternionMatrix_t CalculateOrientation (OrientationData_t& orientationData, OrientationParams_t params);
-
-extern uint8_t CalculatePositionRisk (QuaternionMatrix_t quaternions);
+extern uint8_t CalculatePositionRisk (EulerMatrix_t quaternions);
 
 #endif // __CODE_GRAV_SYSTEM_MODULES_ORIENTATION_H__

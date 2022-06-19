@@ -57,8 +57,8 @@ bool SensorMPU9250::update() {
     this->giro.y = this->device.getGyroX_rads();
     this->giro.z = this->device.getGyroX_rads();
     this->mag.x  = this->device.getMagX_uT();
-    this->mag.y  = this->device.getMagX_uT();
-    this->mag.z  = this->device.getMagX_uT();
+    this->mag.y  = this->device.getMagY_uT();
+    this->mag.z  = this->device.getMagZ_uT();
 
     return true;
 }

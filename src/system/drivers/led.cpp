@@ -2,14 +2,15 @@
 
 #define __ALERT_TIME_BY_DEFAULT 5000
 
-Led::Led (uint8_t pin) {
+Led::Led (uint8_t pin)
+    : pin (pin) {
     this->timerLedOffConfig = {
         .callback = [](void* pPinNumber) -> void {
             digitalWrite(*((uint8_t*)pPinNumber), LOW);
         },
         .arg = &pin,
         .dispatch_method = ESP_TIMER_TASK,
-        .name = "AlrtDown"
+        .name = "LedAlrtDown"
     };
 
     esp_timer_create (&this->timerLedOffConfig, &this->timerLedOff_h);

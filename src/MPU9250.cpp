@@ -472,62 +472,62 @@ int MPU9250::readSensor() {
   _hzcounts = (((int16_t)_buffer[19]) << 8) | _buffer[18];
   
   // transform and convert to float values
-  _ax = (((float)(tX[0]*_axcounts + tX[1]*_aycounts + tX[2]*_azcounts) * _accelScale) - _axb)*_axs;
-  _ay = (((float)(tY[0]*_axcounts + tY[1]*_aycounts + tY[2]*_azcounts) * _accelScale) - _ayb)*_ays;
-  _az = (((float)(tZ[0]*_axcounts + tZ[1]*_aycounts + tZ[2]*_azcounts) * _accelScale) - _azb)*_azs;
-  _gx = ((float)(tX[0]*_gxcounts + tX[1]*_gycounts + tX[2]*_gzcounts) * _gyroScale) - _gxb;
-  _gy = ((float)(tY[0]*_gxcounts + tY[1]*_gycounts + tY[2]*_gzcounts) * _gyroScale) - _gyb;
-  _gz = ((float)(tZ[0]*_gxcounts + tZ[1]*_gycounts + tZ[2]*_gzcounts) * _gyroScale) - _gzb;
-  _hx = (((float)(_hxcounts) * _magScaleX) - _hxb)*_hxs;
-  _hy = (((float)(_hycounts) * _magScaleY) - _hyb)*_hys;
-  _hz = (((float)(_hzcounts) * _magScaleZ) - _hzb)*_hzs;
-  _t = ((((float) _tcounts) - _tempOffset)/_tempScale) + _tempOffset;
+  // _ax = (((float)(tX[0]*_axcounts + tX[1]*_aycounts + tX[2]*_azcounts) * _accelScale) - _axb)*_axs;
+  // _ay = (((float)(tY[0]*_axcounts + tY[1]*_aycounts + tY[2]*_azcounts) * _accelScale) - _ayb)*_ays;
+  // _az = (((float)(tZ[0]*_axcounts + tZ[1]*_aycounts + tZ[2]*_azcounts) * _accelScale) - _azb)*_azs;
+  // _gx = ((float)(tX[0]*_gxcounts + tX[1]*_gycounts + tX[2]*_gzcounts) * _gyroScale) - _gxb;
+  // _gy = ((float)(tY[0]*_gxcounts + tY[1]*_gycounts + tY[2]*_gzcounts) * _gyroScale) - _gyb;
+  // _gz = ((float)(tZ[0]*_gxcounts + tZ[1]*_gycounts + tZ[2]*_gzcounts) * _gyroScale) - _gzb;
+  // _hx = (((float)(_hxcounts) * _magScaleX) - _hxb)*_hxs;
+  // _hy = (((float)(_hycounts) * _magScaleY) - _hyb)*_hys;
+  // _hz = (((float)(_hzcounts) * _magScaleZ) - _hzb)*_hzs;
+  // _t = ((((float) _tcounts) - _tempOffset)/_tempScale) + _tempOffset;
   return 1;
 }
 
 /* returns the accelerometer measurement in the x direction, m/s/s */
 float MPU9250::getAccelX_mss() {
-  return _ax;
+  return _axcounts;
 }
 
 /* returns the accelerometer measurement in the y direction, m/s/s */
 float MPU9250::getAccelY_mss() {
-  return _ay;
+  return _aycounts;
 }
 
 /* returns the accelerometer measurement in the z direction, m/s/s */
 float MPU9250::getAccelZ_mss() {
-  return _az;
+  return _azcounts;
 }
 
 /* returns the gyroscope measurement in the x direction, rad/s */
 float MPU9250::getGyroX_rads() {
-  return _gx;
+  return _gxcounts;
 }
 
 /* returns the gyroscope measurement in the y direction, rad/s */
 float MPU9250::getGyroY_rads() {
-  return _gy;
+  return _gycounts;
 }
 
 /* returns the gyroscope measurement in the z direction, rad/s */
 float MPU9250::getGyroZ_rads() {
-  return _gz;
+  return _gzcounts;
 }
 
 /* returns the magnetometer measurement in the x direction, uT */
 float MPU9250::getMagX_uT() {
-  return _hx;
+  return _hxcounts;
 }
 
 /* returns the magnetometer measurement in the y direction, uT */
 float MPU9250::getMagY_uT() {
-  return _hy;
+  return _hycounts;
 }
 
 /* returns the magnetometer measurement in the z direction, uT */
 float MPU9250::getMagZ_uT() {
-  return _hz;
+  return _hzcounts;
 }
 
 /* returns the die temperature, C */

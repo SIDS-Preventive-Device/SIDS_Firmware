@@ -1,6 +1,7 @@
 #include "../kernel_internal.h"
 #include "system/utils/errors.h"
 #include "system/modules/logger.h"
+#include "system/kernel/ble.h"
 
 KERNEL_SERVICE(OS_SERVICE_THROW_POSITION_RISK_ALERT) {
     SystemConfig_t *config = OsKernel::OsGetSysConfigPtr();
@@ -11,5 +12,6 @@ KERNEL_SERVICE(OS_SERVICE_THROW_POSITION_RISK_ALERT) {
         alertTime = *pTimeMS;
     }
 
+    OsKernel::SetBLECharacteristicValue(BLE_CHT_ALERT, 1);
     config->riskAlert->Alert(alertTime);
 }

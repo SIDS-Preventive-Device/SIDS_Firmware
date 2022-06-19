@@ -7,18 +7,19 @@
 #include "system/kernel/nvstorage.h"
 #include "system/utils/events.h"
 #include "system/utils/linkedlist.h"
+#include "system/kernel/ble.h"
 
 #include <math.h>
 
 //
 // gyro default 250 LSB per d/s -> rad/s
 //
-#define gscale (PI/180.0)
+#define gscale ((250.0/32768.0)*(PI/180.0))
 
 #define INTERVAL_DEBUG 500
-#define INTERVAL_PRODUCTION 30
+#define INTERVAL_PRODUCTION 100
 
-#define MEASURE_INTERVAL INTERVAL_PRODUCTION
+#define MEASURE_INTERVAL 70
 #define POST_ALERT_WAIT  1000
 
 #define RISK_THRESHOLD 0
@@ -30,47 +31,31 @@
  */
 KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
     TickType_t lastTicks = xTaskGetTickCount();
-    Matrix<3, 1, int16_t> giroscopeOffsets;
-    Matrix<3, 1, int16_t> accOffsets;
-    Matrix<3, 1, int16_t> dummyOffsets;
-    Matrix<3, 3, float> dummyCorrection;
     OrientationData_t orientationData;
-    QuaternionMatrix_t quaternionResults;
+    EulerMatrix_t results;
     OrientationParams_t params;
     uint8_t calculatedRisk;
 
-    dummyCorrection += 1.0f;
-
-    giroscopeOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(GiroscopeCalibration).toMatrix();
-    logger << LOG_MASTER << ~giroscopeOffsets << EndLine;
-    accOffsets = VariableCalibrationNvram<Vector3D_t>::Restore(AccelerometerCalibration).toMatrix();
-    logger << LOG_MASTER << ~accOffsets << EndLine;
-
     params = {
-        .giroscopeOffsets = giroscopeOffsets,
         .giroScale = gscale,
-        .accelerometerOffsets = accOffsets,
-        .accelerometerCorrection = dummyCorrection,
-        .magnetometerOffsets = dummyOffsets,
-        .magnetometerCorrection = dummyCorrection,
         .measureInterval = MEASURE_INTERVAL
     };
 
     while (true) {
-        //
-        // Update orientation sensor
-        //
-        OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
+        // //
+        // // Update orientation sensor
+        // //
+        // OsKernel::OsCall(OS_SERVICE_UPDATE_ORIENTATION, &orientationData);
         
         //
         // Calculate quaternion values from orientation sensor using the parameters defined.
         //
-        quaternionResults = CalculateOrientation(orientationData, params);
+        results = CalculateOrientation(orientationData, params);
 
         //
         // Determine the risk of the position
         //
-        calculatedRisk = CalculatePositionRisk(quaternionResults);
+        calculatedRisk = CalculatePositionRisk(results);
 
         //
         // Current risk is important enough?
@@ -81,6 +66,7 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
             //
             OsKernel::OsCall(OS_SERVICE_THROW_POSITION_RISK_ALERT, NULL);
             vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(POST_ALERT_WAIT));
+            OsKernel::SetBLECharacteristicValue(BLE_CHT_ALERT, 0);
             continue;
         }
 
@@ -88,8 +74,6 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
         // Update temperature
         //
         OsKernel::OsCall(OS_SERVICE_UPDATE_TEMPERATURE, NULL);
-
-        vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(MEASURE_INTERVAL));
     }
 }
 
@@ -159,10 +143,8 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_CALIBRATION) {
 
     AccelerometerCalibration.setConfig(AConfig);
     AccelerometerCalibration.calibrate();
-    logger << LOG_INFO << F("Accelerometer calibration values: ") << LOGGER_TEXT_YELLOW << AccelerometerCalibration.getResults() << EndLine;
 
     VariableCalibrationNvram<Vector3D_t>::Save(GiroscopeCalibration);
-    VariableCalibrationNvram<Vector3D_t>::Save(AccelerometerCalibration);
     logger << LOG_INFO << F("Results stored!") << EndLine;
 
     OsKernel::OsCall(OS_SERVICE_REBOOT, NULL);

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "system/utils/array_size.h"
 #if !defined(ARDUINO) && defined(UNITY)
 #include <iostream>
@@ -142,15 +143,19 @@ public:
         return result;
     }
 
-    template <typename Tconst>
-    Matrix<sizeA, sizeB, Tarray> operator *(Tconst const &constant) {
-        Matrix<sizeA, sizeB, Tarray> result;
+    template <size_t sizeC, typename Tarray2>
+    Matrix<sizeA, sizeC, Tarray> operator *(Matrix<sizeB, sizeC, Tarray2> const &matrix2) {
+        Matrix<sizeA, sizeC, Tarray> result;
         size_t indexA = 0;
         size_t indexB = 0;
+        size_t indexC = 0;
 
         for (indexA = 0; indexA < sizeA; indexA++) {
-            for (indexB = 0; indexB < sizeB; indexB++) {
-                result[indexA][indexB] = array[indexA][indexB] * constant;
+            for (indexC = 0; indexC < sizeC; indexC++) {
+                result[indexA][indexC] = 0;
+                for (indexB = 0; indexB < sizeB; indexB++) {
+                    result[indexA][indexC] += array[indexA][indexB] * matrix2[indexB][indexC];
+                }
             }
         }
         
@@ -170,6 +175,21 @@ public:
                 for (indexB = 0; indexB < sizeB; indexB++) {
                     result[indexA][indexC] += array[indexA][indexB] * matrix2[indexB][indexC];
                 }
+            }
+        }
+        
+        return result;
+    }
+
+    template <typename Tconst>
+    Matrix<sizeA, sizeB, Tarray> operator *(Tconst const &constant) {
+        Matrix<sizeA, sizeB, Tarray> result;
+        size_t indexA = 0;
+        size_t indexB = 0;
+
+        for (indexA = 0; indexA < sizeA; indexA++) {
+            for (indexB = 0; indexB < sizeB; indexB++) {
+                result[indexA][indexB] = array[indexA][indexB] * constant;
             }
         }
         
@@ -232,6 +252,9 @@ public:
             for (indexB = 0; indexB < sizeB; indexB++) {
                 c += p.print(String(array[indexA][indexB]));
                 c += p.print(F(" "));
+            }
+            if (sizeA > 1) {
+                c += p.print(F("\n"));
             }
         }
         return c;

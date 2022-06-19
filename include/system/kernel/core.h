@@ -10,7 +10,7 @@
 
 class HardwareSerial;
 
-#define KERNEL_VERSION F("0.4.2")
+#define KERNEL_VERSION F("0.6.0")
 
 typedef struct {
     uint32_t        baudrate;

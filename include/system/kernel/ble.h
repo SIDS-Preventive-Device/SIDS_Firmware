@@ -6,6 +6,7 @@ typedef enum {
     BLE_SERV_TEMPERATURE,
     BLE_SERV_BATTERY,
     BLE_SERV_DEVICE_INFO,
+    BLE_SERV_RISK,
     BLE_SERV_DELIM
 } KernelBleServices_e;
 
@@ -15,6 +16,7 @@ typedef enum {
     BLE_CHT_TEMPERATURE,
     BLE_CHT_FIRMWARE,
     BLE_CHT_STATUS,
+    BLE_CHT_ALERT,
     BLE_CHT_DELIM
 } KernelBleCharecteristics_e;
 

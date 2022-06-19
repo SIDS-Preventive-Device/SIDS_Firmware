@@ -10,9 +10,7 @@ class Led : public IRiskAlert
     esp_timer_create_args_t timerLedOffConfig;
     uint8_t pin;
 public:
-    Led(uint8_t pin = LED_BUILTIN)
-        : pin(pin)
-    { }
+    Led(uint8_t pin = 2);
 
     void Configure ();
     void Alert(uint32_t milliseconds = 0) const;
