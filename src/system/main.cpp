@@ -3,6 +3,7 @@
 #include "system/modules/orientation.h"
 #include "system/modules/calibration.h"
 #include "system/modules/logger.h"
+#include "system/modules/breath.h"
 #include "system/kernel/calls.h"
 #include "system/kernel/nvstorage.h"
 #include "system/utils/events.h"
@@ -35,6 +36,7 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
     EulerMatrix_t results;
     OrientationParams_t params;
     uint8_t calculatedRisk;
+    BreathStatus_e isBreathing;
 
     params = {
         .giroScale = gscale,
@@ -62,11 +64,24 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
         //
         if (calculatedRisk > RISK_THRESHOLD) {
             //
-            // Alert and activate buzzer!
+            // Alert!
             //
             OsKernel::OsCall(OS_SERVICE_THROW_POSITION_RISK_ALERT, NULL);
             vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(POST_ALERT_WAIT));
             continue;
+        }
+
+        //
+        // Check is breathing
+        //
+        isBreathing = isBreathMovementDetected(orientationData);
+
+        if (isBreathing == BREATH_NOT_DETECTED) {
+            //
+            // Alert!
+            //
+            OsKernel::OsCall(OS_SERVICE_THROW_BREATH_RISK_ALERT, NULL);
+            vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(POST_ALERT_WAIT));
         }
 
         //

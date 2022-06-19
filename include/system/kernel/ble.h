@@ -17,6 +17,7 @@ typedef enum {
     BLE_CHT_FIRMWARE,
     BLE_CHT_STATUS,
     BLE_CHT_ALERT,
+    BLE_CHT_BREATH,
     BLE_CHT_DELIM
 } KernelBleCharecteristics_e;
 

@@ -11,6 +11,7 @@ KernelServicesEntry_t OsKernel::KernelServicesCallTable[] = {
     { OS_SERVICE_UPDATE_ORIENTATION,            KERNEL_SERVICE_NAME(OS_SERVICE_UPDATE_ORIENTATION),                 F("UpdateOrientation")      },
     { OS_SERVICE_UPDATE_TEMPERATURE,            KERNEL_SERVICE_NAME(OS_SERVICE_UPDATE_TEMPERATURE),                 F("UpdateTemperature")      },
     { OS_SERVICE_THROW_POSITION_RISK_ALERT,     KERNEL_SERVICE_NAME(OS_SERVICE_THROW_POSITION_RISK_ALERT),          F("AlertPositionRisk")      },
+    { OS_SERVICE_THROW_BREATH_RISK_ALERT,       KERNEL_SERVICE_NAME(OS_SERVICE_THROW_BREATH_RISK_ALERT),            F("AlertBreathRisk")        },
     { OS_SERVICE_REBOOT,                        KERNEL_SERVICE_NAME(OS_SERVICE_REBOOT),                             F("Reboot")                 }
 };
 

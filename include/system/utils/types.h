@@ -24,6 +24,14 @@ struct Vector3D_t : Printable {
         vec[2][0] = z;
         return vec;
     }
+
+    static Vector3D_t zero() {
+        Vector3D_t vec;
+        vec.x = 0;
+        vec.y = 0;
+        vec.z = 0;
+        return vec;
+    }
 };
 
 typedef struct Vector3D_t Vector3D_t;

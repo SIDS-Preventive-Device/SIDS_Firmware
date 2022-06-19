@@ -39,7 +39,8 @@ BLECharacteristic_t CharacteristicsTable[BLE_CHT_DELIM] = {
     { BLE_SERV_TEMPERATURE,         TEMPERATURE_CHARACTERISTIC_UUID,        new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                                                              },
     { BLE_SERV_DEVICE_INFO,         FIRMWARE_VERSION_CHARACTERISTIC_UUID,   new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                                                              },
     { BLE_SERV_DEVICE_INFO,         STATUS_CODE_CHARACTERISTIC_UUID,        new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ                                                                              },
-    { BLE_SERV_RISK,                ALERT_CHARACTERISTIC_UUID,              new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_INDICATE  }
+    { BLE_SERV_RISK,                ALERT_CHARACTERISTIC_UUID,              new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_INDICATE  },
+    { BLE_SERV_RISK,                BREATH_CHARACTERISTIC_UUID,             new BLE2902(),      NULL, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY | BLECharacteristic::PROPERTY_INDICATE  }
 };
 
 void DumpCharacteristicsTable();
