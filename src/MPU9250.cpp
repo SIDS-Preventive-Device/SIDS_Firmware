@@ -27,6 +27,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SO
 
 #include "Arduino.h"
 #include "MPU9250.h"
+#include "system/modules/logger.h"
 
 /* MPU9250 object, input the I2C bus and address */
 MPU9250::MPU9250(I2C_t &bus,uint8_t address){
@@ -173,10 +174,6 @@ int MPU9250::begin(){
   }       
   // instruct the MPU9250 to get 7 bytes of data from the AK8963 at the sample rate
   readAK8963Registers(AK8963_HXL,7,_buffer);
-  // estimate gyro bias
-  if (calibrateGyro() < 0) {
-    return -20;
-  }
   // successful init, return 1
   return 1;
 }
@@ -1080,14 +1077,17 @@ int MPU9250::writeAK8963Register(uint8_t subAddress, uint8_t data){
 int MPU9250::readAK8963Registers(uint8_t subAddress, uint8_t count, uint8_t* dest){
   // set slave 0 to the AK8963 and set for read
 	if (writeRegister(I2C_SLV0_ADDR,AK8963_I2C_ADDR | I2C_READ_FLAG) < 0) {
+    logger << LOG_ERROR << "Error on writeRegister(I2C_SLV0_ADDR,AK8963_I2C_ADDR | I2C_READ_FLAG)" << EndLine;
     return -1;
   }
   // set the register to the desired AK8963 sub address
 	if (writeRegister(I2C_SLV0_REG,subAddress) < 0) {
+    logger << LOG_ERROR << "Error on writeRegister(I2C_SLV0_REG,subAddress)" << EndLine;
     return -2;
   }
   // enable I2C and request the bytes
 	if (writeRegister(I2C_SLV0_CTRL,I2C_SLV0_EN | count) < 0) {
+    logger << LOG_ERROR << "Error on writeRegister(I2C_SLV0_CTRL,I2C_SLV0_EN | count)" << EndLine;
     return -3;
   }
 	delay(1); // takes some time for these registers to fill
@@ -1110,6 +1110,7 @@ int MPU9250::whoAmI(){
 int MPU9250::whoAmIAK8963(){
   // read the WHO AM I register
   if (readAK8963Registers(AK8963_WHO_AM_I,1,_buffer) < 0) {
+    logger << LOG_ERROR << "Error on readAK8963Registers(AK8963_WHO_AM_I,1,_buffer)" << EndLine;
     return -1;
   }
   // return the register value

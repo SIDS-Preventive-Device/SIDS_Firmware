@@ -14,10 +14,15 @@ SensorMPU9250::SensorMPU9250()
 
 bool SensorMPU9250::init() {
     logger << LOG_DEBUG << F("Initializing Sensor MPU9250") << EndLine;
-    this->device.begin();
+    if (this->device.begin() < 0) {
+        logger << LOG_ERROR << "Can't begin MPU" << EndLine;
+        this->state = SENSOR_ERROR_ON_CONNECT;
+    }
+
     this->device.setAccelRange(MPU9250::ACCEL_RANGE_2G);
     this->device.setGyroRange(MPU9250::GYRO_RANGE_250DPS);
-    this->device.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_41HZ);
+    this->device.setDlpfBandwidth(MPU9250::DLPF_BANDWIDTH_10HZ);
+
     logger << LOG_DEBUG << F("Testing connection... ");
     this->checkState();
     switch (this->state)

@@ -12,22 +12,21 @@ static MahonyFilter mahony;
 //#define QUATERNIONS 1
 
 // Offsets obtenidos para el acelerometro y su matriz de corrección, donde solo hacemos uso de los valores en la diagonal.
-float A_B[3]{86.16, -74.97, -450.39};
+float A_B[3]{86.16,  -74.97, -450.39};
 
 float A_Ainv[3][3]{
-    {0.06144, 0.00177, -0.00034},
-    {0.00177, 0.06036, -0.00081},
-    {-0.00034, -0.00081, 0.05985}};
+   {  0.06144,  0.00177, -0.00034},
+  {  0.00177,  0.06036, -0.00081},
+  { -0.00034, -0.00081,  0.05985}};
 
 // Offsets obtenidos para el magnetometro y su matriz de corrección, donde solo hacemos uso de los valores en la diagonal.
-float M_B[3]{29.61, 37.55, -312.00};
+float M_B[3]{ 29.61,   37.55, -312.00 };
 
-float M_Ainv[3][3]{
-    {0.48370, -0.00397, -0.00072},
-    {-0.00397, 0.48879, -0.00555},
-    {-0.00072, -0.00555, 0.47706}};
+float M_Ainv[3][3]{{  0.48370, -0.00397, -0.00072},
+  { -0.00397,  0.48879, -0.00555},
+  { -0.00072, -0.00555,  0.47706}};
 
-float G_off[3] = {-145.8, -145.8, -145.8}; // raw offsets, determined for gyro at rest
+float G_off[3] = { -145.8, -145.8, -145.8}; // raw offsets, determined for gyro at rest
 
 int16_t ax, ay, az;
 int16_t gx, gy, gz;
@@ -48,10 +47,10 @@ int count = 0;
 float vectorDot(float a[3], float b[3]);
 void vectorNormalize(float a[3]);
 
-EulerMatrix_t CalculateOrientation(OrientationData_t &orientationData, OrientationParams_t params)
+Vector3D_t CalculateOrientation(OrientationData_t &orientationData, OrientationParams_t params)
 {
     char buffer[64];
-    EulerMatrix_t result;
+    Vector3D_t result;
     float temp[3];
     float vGiro[3];
     float vAcc[3];
@@ -100,8 +99,8 @@ EulerMatrix_t CalculateOrientation(OrientationData_t &orientationData, Orientati
     Mxyz[2] = M_Ainv[2][0] * temp[0] + M_Ainv[2][1] * temp[1] + M_Ainv[2][2] * temp[2];
     vectorNormalize(Mxyz);
 
-    now = micros();
-    dT = (now - last) * 1.0e-6; // Tiempo que ha pasado desde la última medición
+    now = millis();
+    dT = (now - last) * 1.0e-4; // Tiempo que ha pasado desde la última medición
     last = now;
 
     // Los ejes estan invertidos por las siguientes razones:
@@ -129,13 +128,19 @@ EulerMatrix_t CalculateOrientation(OrientationData_t &orientationData, Orientati
     memset(buffer, 0, 64);
     sprintf(buffer, "%.2f %.2f %.2f", rollPitchYaw[0], rollPitchYaw[1], rollPitchYaw[2]);
     OsKernel::SetBLECharacteristicValue(BLE_CHT_POSITION, buffer);
-    logger << "Orientation: " << buffer << "\n";
+
+    result.x = rollPitchYaw[0];
+    result.y = rollPitchYaw[1];
+    result.z = rollPitchYaw[2];
 
     return result;
 }
 
-uint8_t CalculatePositionRisk(EulerMatrix_t quaternions)
+uint8_t CalculatePositionRisk(Vector3D_t euler)
 {
+    logger << "Orientation: " << euler << EndLine;
+    if(abs(euler.x) > 70 || abs(euler.y) > 70 )
+        return 1;
     return 0;
 }
 
@@ -233,7 +238,7 @@ int MahonyFilter::getRollPitchYaw(float *navigationAngles)
     //*Formulas sacadas de aquí: http://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles, no hay que olvidar que en este tipo de representación,
     //*los angulos no son conmutativos, una rotación afecta a la otra, en este caso, un pitch >= +-90, puede afectar al yaw.
 
-    navigationAngles[0] = atan2((this->q[0] * this->q[1] + this->q[2] * this->q[3]), 0.5f - (this->q[1] * this->q[1] + this->q[2] * this->q[2]));
+    navigationAngles[0] = -atan2((this->q[0] * this->q[1] + this->q[2] * this->q[3]), 0.5f - (this->q[1] * this->q[1] + this->q[2] * this->q[2]));
     navigationAngles[1] = asin(2.0f * (this->q[0] * this->q[2] - this->q[1] * this->q[3]));
     navigationAngles[2] = atan2((this->q[1] * this->q[2] + this->q[0] * this->q[3]), 0.5f - (this->q[2] * this->q[2] + this->q[3] * this->q[3]));
     return 0;

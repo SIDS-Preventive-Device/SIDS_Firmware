@@ -137,8 +137,8 @@ typedef struct
     uint32_t measureInterval;
 } OrientationParams_t;
 
-extern EulerMatrix_t CalculateOrientation(OrientationData_t &orientationData, OrientationParams_t params);
+extern Vector3D_t CalculateOrientation(OrientationData_t &orientationData, OrientationParams_t params);
 
-extern uint8_t CalculatePositionRisk(EulerMatrix_t quaternions);
+extern uint8_t CalculatePositionRisk(Vector3D_t quaternions);
 
 #endif // __CODE_GRAV_SYSTEM_MODULES_ORIENTATION_H__

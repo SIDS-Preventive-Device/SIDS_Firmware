@@ -24,10 +24,11 @@ BreathStatus_e isBreathMovementDetected(OrientationData_t &orientation)
 {
     static LinkedList<Vector3D_t> AccelerometerSamples;
     static const size_t MaxSamples = 10;
-    static BreathStatus_e lastResult = BREATH_INITIALIZING;
     static unsigned long st = 0;
     static unsigned long end = 0;
+    static unsigned long counts = 0;
 
+    BreathStatus_e status = BREATH_NOT_DETECTED;
 
     AccelerometerSamples.add(orientation.acceleration);
 
@@ -52,17 +53,20 @@ BreathStatus_e isBreathMovementDetected(OrientationData_t &orientation)
         vector = integrated.toMatrix();
         AccelerometerSamples.clear();
 
-        logger << LOG_INFO << F("Acceleration vector: ") << vector << F(", magnitude: ") << vector.magnitude() << EndLine;
+        logger << LOG_INFO << F("Acceleration vector: ") << ~vector << F(", magnitude: ") << vector.magnitude() << EndLine;
 
-        lastResult = BREATH_NOT_DETECTED;
-        if (vector.magnitude() > 10) {
-            lastResult = BREATH_DETECTED;
+        counts ++;
+        if (abs(vector.magnitude()) > 40) {
+            status = BREATH_DETECTED;
+            counts = 0;
         }
 
-        if (lastResult == BREATH_NOT_DETECTED) {
+        if (counts > 20) {
             logger << LOG_WARN << F("Breath not detected!") << EndLine;
+            counts = 0;
+            return BREATH_NOT_DETECTED;
         }
     }
 
-    return lastResult;
+    return BREATH_DETECTED;
 }

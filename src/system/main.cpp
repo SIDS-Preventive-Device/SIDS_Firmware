@@ -33,7 +33,7 @@
 KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
     TickType_t lastTicks = xTaskGetTickCount();
     OrientationData_t orientationData;
-    EulerMatrix_t results;
+    Vector3D_t results;
     OrientationParams_t params;
     uint8_t calculatedRisk;
     BreathStatus_e isBreathing;
@@ -66,6 +66,7 @@ KERNEL_BOOT_THREAD_FUNC(BOOT_NORMAL) {
             //
             // Alert!
             //
+            logger << LOG_WARN << "Risk on current position" << EndLine;
             OsKernel::OsCall(OS_SERVICE_THROW_POSITION_RISK_ALERT, NULL);
             vTaskDelayUntil(&lastTicks, pdMS_TO_TICKS(POST_ALERT_WAIT));
             continue;
