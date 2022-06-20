@@ -13,6 +13,12 @@ resources:
 
 container: platformio
 steps:
+- script: platformio upgrade
+  displayName: 'Upgrade PlatformIO'
+
+- script: platformio --version
+  displayName: 'Check version'
+
 - script: platformio run -d . -e codeGrav
   displayName: 'Build firmware'
 
